@@ -1,0 +1,728 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  customer
+  employee
+  admin
+
+  @@map("user_role")
+}
+
+/// Customer accounts are either an organisation (7-digit register) or an individual (e.g. УБ12345678).
+enum CustomerType {
+  company
+  individual
+
+  @@map("customer_type")
+}
+
+enum ContactKind {
+  demo
+  quote
+  feedback
+  notify
+
+  @@map("contact_kind")
+}
+
+model User {
+  id                String       @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId          Int?         @unique @map("legacy_id")
+  username          String       @db.VarChar(255)
+  email             String       @unique @db.VarChar(255)
+  passwordHash      String?      @map("password_hash") @db.VarChar(255)
+  companyName       String?      @map("company_name") @db.VarChar(255)
+  /// Organisation register number (7 digits). Numeric because the desktop license token carries it as a number.
+  companyRegister   BigInt?      @unique @map("company_register")
+  customerType      CustomerType @default(company) @map("customer_type")
+  /// Individual's civil register number, upper-case, e.g. УБ12345678.
+  personalRegister  String?      @unique @map("personal_register") @db.VarChar(10)
+  role              UserRole     @default(customer)
+  /// Approved by staff; customers cannot sign in before this.
+  adminConfirmed    Boolean      @default(false) @map("admin_confirmed")
+  blocked           Boolean      @default(false)
+  seen              Boolean      @default(false)
+  resetToken        String?      @map("reset_token") @db.VarChar(255)
+  resetTokenExpires DateTime?    @map("reset_token_expires") @db.Timestamptz
+  /// Sessions issued before this are rejected.
+  passwordChangedAt DateTime?    @map("password_changed_at") @db.Timestamptz
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  products          UserProduct[]
+  issues            ProductIssue[]
+  answers           IssueAnswer[]
+  coreIssuesChecked CoreIssue[]    @relation("CoreIssueCheckedBy")
+
+  @@index([resetToken])
+  @@index([createdAt])
+  @@map("users")
+}
+
+/// Uploaded files. `url` is the public path, e.g. /uploads/abc.png (same as Strapi).
+model File {
+  id              String   @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId        Int?     @unique @map("legacy_id")
+  name            String   @db.VarChar(255)
+  alternativeText String?  @map("alternative_text") @db.VarChar(255)
+  hash            String   @db.VarChar(255)
+  ext             String?  @db.VarChar(32)
+  mime            String   @db.VarChar(255)
+  sizeKb          Int?     @map("size_kb")
+  width           Int?
+  height          Int?
+  url             String   @db.VarChar(512)
+  formats         Json?
+  /// Stored in PRIVATE_UPLOAD_DIR and served by /files/[id] with an access check
+  /// (issue attachments, project-issue screenshots), never by the public /uploads route.
+  isPrivate       Boolean  @default(false) @map("is_private")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  posts            Post[]
+  products         Product[]         @relation("ProductImage")
+  productLogos     Product[]         @relation("ProductLogo")
+  productBgs       Product[]         @relation("ProductBackground")
+  testimonials     Testimonial[]
+  clientLogos      ClientLogo[]
+  caseCovers       CaseStudy[]       @relation("CaseStudyCover")
+  caseLogos        CaseStudy[]       @relation("CaseStudyLogo")
+  issueAttachments IssueAttachment[]
+  coreIssueFiles   CoreIssueFile[]
+  employees        Employee[]
+  awards           Award[]
+  downloads        Download[]
+
+  @@map("files")
+}
+
+model Post {
+  id          String    @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId    Int?      @unique @map("legacy_id")
+  title       String    @db.VarChar(255)
+  slug        String    @unique @db.VarChar(255)
+  category    String?   @db.VarChar(255)
+  excerpt     String?
+  /// Body as HTML (old Strapi posts were CKEditor HTML).
+  body        String    @default("")
+  imageId     String?   @map("image_id")
+  image       File?     @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  viewCount   Int       @default(0) @map("view_count")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([publishedAt], map: "posts_published_idx")
+  @@map("posts")
+}
+
+/// Step-by-step help pages at /support/guides/<slug>, grouped by category (lib/guide-categories.ts).
+model Guide {
+  id          String    @id @default(cuid(2))
+  title       String    @db.VarChar(255)
+  slug        String    @unique @db.VarChar(160)
+  category    String    @db.VarChar(64)
+  /// Order inside the category (the step number shown in lists).
+  sortOrder   Int       @default(0) @map("sort_order")
+  /// Body as HTML. A YouTube link alone in a paragraph is shown as a video card.
+  body        String    @default("")
+  /// "Шинэчилсэн" date shown on the page: when the instructions last changed.
+  contentDate DateTime? @map("content_date") @db.Date
+  viewCount   Int       @default(0) @map("view_count")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([category, sortOrder])
+  @@map("guides")
+}
+
+/// Programs and files on /support/downloads: an uploaded file, a link to the vendor's site, or both.
+model Download {
+  id          String   @id @default(cuid(2))
+  title       String   @db.VarChar(160)
+  description String?  @db.VarChar(500)
+  fileId      String?  @map("file_id")
+  file        File?    @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  /// Official download page (AnyDesk, TeamViewer, ...).
+  externalUrl String?  @map("external_url") @db.VarChar(512)
+  /// Slug of the guide that explains it (/support/guides/<slug>).
+  guideSlug   String?  @map("guide_slug") @db.VarChar(160)
+  sortOrder   Int      @default(0) @map("sort_order")
+  isPublic    Boolean  @default(true) @map("is_public")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([isPublic, sortOrder])
+  @@index([fileId])
+  @@map("downloads")
+}
+
+/// Legacy product catalogue used to assign products to portal customers.
+/// Product status on the public site.
+enum ProductStatus {
+  available
+  coming_soon
+
+  @@map("product_status")
+}
+
+/// Where a product is shown on /products and in the header menu.
+enum ProductGroup {
+  /// The large highlighted box (MACS ERP), listing its modules.
+  main
+  /// Cards under the main product (MACS POS, MACS Micro).
+  featured
+  /// The «Бусад систем» list.
+  other
+
+  @@map("product_group")
+}
+
+model Product {
+  id           String        @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId     Int?          @unique @map("legacy_id")
+  /// Short display name, e.g. "PACS".
+  name         String        @db.VarChar(120)
+  /// Long name, e.g. "PACS төслийн санхүүгийн программ" (page title, customer portal).
+  title        String        @db.VarChar(255)
+  slug         String        @unique @db.VarChar(255)
+  /// One-line pitch under the name (hero, lists, menu).
+  tagline      String?       @db.VarChar(255)
+  /// Short label next to the icon (hero, product cards), e.g. "Кассын систем".
+  badge        String?       @db.VarChar(40)
+  /// Key from PRODUCT_ICONS (lib/product-icons.tsx).
+  icon         String?       @db.VarChar(40)
+  status       ProductStatus @default(available)
+  group        ProductGroup  @default(other)
+  /// Shown on /products, in the menu and in «Бусад бүтээгдэхүүн». Unlisted pages still open by URL.
+  listed       Boolean       @default(true)
+  sortOrder    Int           @default(0) @map("sort_order")
+  /// Set for modules (e.g. MACS ERP › Нягтлан бодох бүртгэл), served at /products/<parent>/<slug>.
+  parentId     String?       @map("parent_id")
+  parent       Product?      @relation("ProductModules", fields: [parentId], references: [id], onDelete: Restrict)
+  modules      Product[]     @relation("ProductModules")
+  category     String?       @db.VarChar(255)
+  /// Old Strapi rich text, kept for reference; the page is built from `blocks`.
+  description  String?
+  /// Picture on the right of the hero (instead of the icon illustration).
+  imageId      String?       @map("image_id")
+  image        File?         @relation("ProductImage", fields: [imageId], references: [id], onDelete: SetNull)
+  /// Product logo, shown instead of the icon (hero, lists, menu).
+  logoId       String?       @map("logo_id")
+  logo         File?         @relation("ProductLogo", fields: [logoId], references: [id], onDelete: SetNull)
+  /// Background photo of the hero section.
+  backgroundId String?       @map("background_id")
+  background   File?         @relation("ProductBackground", fields: [backgroundId], references: [id], onDelete: SetNull)
+  /// Page views carried over from the old site (Strapi `count`).
+  viewCount    Int           @default(0) @map("view_count")
+  publishedAt  DateTime?     @map("published_at") @db.Timestamptz
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  /// YouTube (or other embeddable) intro video: «Танилцуулга бичлэг үзэх».
+  videoUrl     String?  @map("video_url") @db.VarChar(500)
+  /// version_infos.productname values shown as this product's «Шинэчлэлтүүд», e.g. {MACS}.
+  versionNames String[] @default([]) @map("version_names")
+  /// Slugs of /solutions pages this product is used in (see SOLUTIONS in lib/site.ts).
+  solutions    String[] @default([])
+  /// Column in the comparison table on /products.
+  inComparison Boolean  @default(false) @map("in_comparison")
+
+  blocks          ProductBlock[]
+  users           UserProduct[]
+  issues          ProductIssue[]
+  testimonials    Testimonial[]
+  caseStudies     CaseStudy[]
+  comparisonCells ComparisonCell[]
+
+  @@index([parentId, sortOrder])
+  @@map("products")
+}
+
+enum ProductBlockKind {
+  /// Rich text. `style`: lead (larger intro text), checklist (list items get check marks) or null.
+  text
+  /// Cards with a title and text each; `columns` 1 or 2.
+  features
+  /// List of links, e.g. related guides.
+  links
+
+  @@map("product_block_kind")
+}
+
+/// One section of a product page, in `sortOrder`.
+model ProductBlock {
+  id        String             @id @default(cuid(2))
+  productId String             @map("product_id")
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  kind      ProductBlockKind
+  heading   String?            @db.VarChar(255)
+  style     String?            @db.VarChar(20)
+  body      String?
+  columns   Int                @default(1)
+  sortOrder Int                @default(0) @map("sort_order")
+  items     ProductBlockItem[]
+
+  @@index([productId, sortOrder])
+  @@map("product_blocks")
+}
+
+/// A card of a `features` block or a link of a `links` block.
+model ProductBlockItem {
+  id        String       @id @default(cuid(2))
+  blockId   String       @map("block_id")
+  block     ProductBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  title     String       @db.VarChar(255)
+  body      String?
+  href      String?      @db.VarChar(500)
+  sortOrder Int          @default(0) @map("sort_order")
+
+  @@index([blockId, sortOrder])
+  @@map("product_block_items")
+}
+
+model UserProduct {
+  userId    String  @map("user_id")
+  productId String  @map("product_id")
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([userId, productId])
+  @@index([productId])
+  @@map("user_products")
+}
+
+/// Customer-reported product issues (Strapi: product-feedback).
+model ProductIssue {
+  id             String   @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId       Int?     @unique @map("legacy_id")
+  title          String   @db.VarChar(255)
+  content        String   @default("")
+  productId      String?  @map("product_id")
+  product        Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  /// SetNull: deleting a customer keeps the issue history for staff.
+  userId         String?  @map("user_id")
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  adminConfirmed Boolean  @default(false) @map("admin_confirmed")
+  resolved       Boolean  @default(false)
+  /// Staff has seen the issue.
+  seen           Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  answers     IssueAnswer[]
+  attachments IssueAttachment[]
+
+  @@index([userId, updatedAt])
+  @@index([productId])
+  @@index([updatedAt])
+  @@map("product_issues")
+}
+
+model IssueAnswer {
+  id        String       @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId  Int?         @unique @map("legacy_id")
+  issueId   String       @map("issue_id")
+  issue     ProductIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId    String?      @map("user_id")
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  content   String
+  /// Seen by the other party.
+  seen      Boolean      @default(false)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([issueId, createdAt])
+  @@index([userId])
+  @@map("issue_answers")
+}
+
+model IssueAttachment {
+  issueId String       @map("issue_id")
+  fileId  String       @map("file_id")
+  issue   ProductIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  file    File         @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, fileId])
+  @@index([fileId])
+  @@map("issue_attachments")
+}
+
+model ProjectCategory {
+  id        String   @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId  Int?     @unique @map("legacy_id")
+  name      String   @db.VarChar(255)
+  slug      String   @unique @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  coreIssues CoreIssue[]
+
+  @@map("project_categories")
+}
+
+/// Public issue reports for custom projects (Strapi: coreissue).
+model CoreIssue {
+  id          String           @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId    Int?             @unique @map("legacy_id")
+  name        String?          @db.VarChar(255)
+  email       String?          @db.VarChar(255)
+  title       String?          @db.VarChar(255)
+  description String?
+  /// true = handled
+  status      Boolean          @default(false)
+  categoryId  String?          @map("category_id")
+  category    ProjectCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  /// Staff member who marked it handled, and when.
+  checkedById String?          @map("checked_by_id")
+  checkedBy   User?            @relation("CoreIssueCheckedBy", fields: [checkedById], references: [id], onDelete: SetNull)
+  checkedAt   DateTime?        @map("checked_at") @db.Timestamptz
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  files CoreIssueFile[]
+
+  @@index([categoryId])
+  @@index([createdAt])
+  @@map("core_issues")
+}
+
+model CoreIssueFile {
+  coreIssueId String    @map("core_issue_id")
+  fileId      String    @map("file_id")
+  coreIssue   CoreIssue @relation(fields: [coreIssueId], references: [id], onDelete: Cascade)
+  file        File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([coreIssueId, fileId])
+  @@index([fileId])
+  @@map("core_issue_files")
+}
+
+/// Website form submissions (Strapi: infosystem-report + new demo form).
+model ContactRequest {
+  id        String      @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId  Int?        @unique @map("legacy_id")
+  kind      ContactKind @default(demo)
+  name      String?     @db.VarChar(255)
+  company   String?     @db.VarChar(255)
+  phone     String?     @db.VarChar(64)
+  email     String?     @db.VarChar(255)
+  product   String?     @db.VarChar(255)
+  message   String?
+  seen      Boolean     @default(false)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("contact_requests")
+}
+
+/// Notices shown inside the MACS / POS desktop apps (GET /api/news-check).
+/// Integer codes and column names mirror the Strapi model the apps were built against.
+model InsertNotification {
+  id          String    @id @default(cuid(2))
+  /// Numeric id the MACS / POS desktop apps see as `id` (the old Strapi id for imported rows).
+  seq         Int       @unique @default(autoincrement())
+  description String?   @db.VarChar(255)
+  /// 0 = all, 1 = MACS XE3, 2 = MACS F
+  macsversion Int       @default(0)
+  /// 0 = all, 1 = MACS, 2 = POS
+  apptype     Int       @default(0)
+  /// 0 = all customers, 1 = only customer_id list
+  toCustomer  Int       @default(0) @map("to_customer")
+  /// 0 = file, 1 = html
+  filetype    Int       @default(0)
+  isActive    Int       @default(1) @map("is_active")
+  expireDate  DateTime? @map("expire_date") @db.Date
+  acount      Int?
+  newsText    String?   @map("news_text")
+  pdfFile     String?   @map("pdf_file") @db.VarChar(255)
+  fileUrl     String?   @map("file_url") @db.VarChar(255)
+  /// Comma separated customer register numbers.
+  customerId  String?   @map("customer_id")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("insert_notifications")
+}
+
+model VersionInfo {
+  id          String    @id @default(cuid(2))
+  /// Numeric id the MACS / POS desktop apps see as `id` (the old Strapi id for imported rows).
+  seq         Int       @unique @default(autoincrement())
+  changedDate DateTime  @map("changed_date") @db.Date
+  description String?
+  /// MACS | POS | MACSPOS
+  productname String?   @db.VarChar(32)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([productname, changedDate])
+  @@index([changedDate])
+  @@map("version_infos")
+}
+
+// ---------------- Company information (edited in /admin/company) ----------------
+
+/// Single row (id = 1) with the company profile shown across the site.
+model CompanySettings {
+  id               String   @id @default(cuid(2))
+  name             String   @default("InfoSystems Mongolia") @db.VarChar(255)
+  legalName        String?  @map("legal_name") @db.VarChar(255)
+  /// One or two sentences (footer, meta description).
+  shortDescription String?  @map("short_description")
+  /// Longer "about us" text as HTML.
+  about            String?
+  foundedYear      Int?     @map("founded_year")
+  address          String?
+  /// Short label for the map card, e.g. "Баянбогд плаза".
+  locationName     String?  @map("location_name") @db.VarChar(255)
+  latitude         Decimal? @db.Decimal(9, 6)
+  longitude        Decimal? @db.Decimal(9, 6)
+  /// Link opened by "Google Maps-д нээх".
+  mapUrl           String?  @map("map_url") @db.VarChar(1024)
+  workingHours     String?  @map("working_hours") @db.VarChar(255)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("company_settings")
+}
+
+enum ContactType {
+  phone
+  email
+  social
+
+  @@map("contact_type")
+}
+
+/// Phones, e-mails and social links. The first phone is used by the mobile "Залгах" button.
+model CompanyContact {
+  id           String      @id @default(cuid(2))
+  type         ContactType
+  /// e.g. "Борлуулалт", "Техник дэмжлэг", "Facebook"
+  label        String?     @db.VarChar(120)
+  /// Phone number, e-mail address, or URL for social links.
+  value        String      @db.VarChar(512)
+  showInFooter Boolean     @default(true) @map("show_in_footer")
+  sortOrder    Int         @default(0) @map("sort_order")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([type, sortOrder])
+  @@map("company_contacts")
+}
+
+/// Хэлтэс, тасаг. Nested units (e.g. a тасаг inside a хэлтэс) use parentId.
+model Department {
+  id        String       @id @default(cuid(2))
+  name      String       @db.VarChar(255)
+  parentId  String?      @map("parent_id")
+  parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  Department[] @relation("DepartmentTree")
+  sortOrder Int          @default(0) @map("sort_order")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  positions Position[]
+
+  @@unique([parentId, name])
+  @@map("departments")
+}
+
+/// Албан тушаал. Belongs to one department / unit; names are unique within it.
+model Position {
+  id           String     @id @default(cuid(2))
+  name         String     @db.VarChar(255)
+  departmentId String     @map("department_id")
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  sortOrder    Int        @default(0) @map("sort_order")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  employees Employee[]
+
+  @@unique([departmentId, name])
+  @@map("positions")
+}
+
+model Employee {
+  id         String   @id @default(cuid(2))
+  name       String   @db.VarChar(255)
+  /// Required. The department comes from the position, so the two can never disagree.
+  positionId String   @map("position_id")
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  phone      String?  @db.VarChar(64)
+  email      String?  @db.VarChar(255)
+  bio        String?
+  photoId    String?  @map("photo_id")
+  photo      File?    @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  /// Shown on the "Бидний тухай" page.
+  isPublic   Boolean  @default(true) @map("is_public")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([positionId])
+  @@map("employees")
+}
+
+/// Шагнал урамшуулал, гэрчилгээ. Shown on the "Бидний тухай" page (#awards).
+model Award {
+  id          String   @id @default(cuid(2))
+  /// Strapi id from the old site (null for rows created in the new system).
+  legacyId    Int?     @unique @map("legacy_id")
+  title       String   @db.VarChar(255)
+  /// Олгосон байгууллага
+  issuer      String?  @db.VarChar(255)
+  year        Int?
+  description String?
+  imageId     String   @map("image_id")
+  image       File     @relation(fields: [imageId], references: [id], onDelete: Restrict)
+  isPublic    Boolean  @default(true) @map("is_public")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([isPublic, sortOrder])
+  @@map("awards")
+}
+
+/// Company history on the About page («Он цагийн хэлхээс»), ordered by year.
+model Milestone {
+  id          String   @id @default(cuid(2))
+  year        Int
+  title       String   @db.VarChar(255)
+  description String?
+  isPublic    Boolean  @default(true) @map("is_public")
+  /// Tie-break for several milestones in the same year.
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([isPublic, year])
+  @@map("milestones")
+}
+
+/// Customer quote («Хэрэглэгчийн сэтгэгдэл»), on the home page and the product's page.
+model Testimonial {
+  id          String   @id @default(cuid(2))
+  quote       String
+  authorName  String   @map("author_name") @db.VarChar(120)
+  authorTitle String?  @map("author_title") @db.VarChar(120)
+  companyName String?  @map("company_name") @db.VarChar(160)
+  photoId     String?  @map("photo_id")
+  photo       File?    @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  /// Also shown on this product's page.
+  productId   String?  @map("product_id")
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  isPublic    Boolean  @default(true) @map("is_public")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([isPublic, sortOrder])
+  @@index([productId])
+  @@map("testimonials")
+}
+
+/// Customer organisation logo for the «Бидэнд итгэдэг байгууллагууд» strip.
+model ClientLogo {
+  id        String   @id @default(cuid(2))
+  name      String   @db.VarChar(160)
+  logoId    String   @map("logo_id")
+  logo      File     @relation(fields: [logoId], references: [id], onDelete: Restrict)
+  url       String?  @db.VarChar(500)
+  isPublic  Boolean  @default(true) @map("is_public")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([isPublic, sortOrder])
+  @@map("client_logos")
+}
+
+/// Success story («Амжилтын түүх») at /customers/<slug>.
+model CaseStudy {
+  id          String    @id @default(cuid(2))
+  title       String    @db.VarChar(255)
+  slug        String    @unique @db.VarChar(160)
+  clientName  String    @map("client_name") @db.VarChar(160)
+  /// Industry label, e.g. "Худалдаа".
+  industry    String?   @db.VarChar(120)
+  /// One or two sentences for the list card.
+  summary     String?
+  /// Rich text: challenge, solution, results.
+  body        String    @default("")
+  /// Up to three headline results, one per line as "value | label", e.g. "2 дахин | хурдан сарын хаалт".
+  highlights  String?
+  coverId     String?   @map("cover_id")
+  cover       File?     @relation("CaseStudyCover", fields: [coverId], references: [id], onDelete: SetNull)
+  logoId      String?   @map("logo_id")
+  logo        File?     @relation("CaseStudyLogo", fields: [logoId], references: [id], onDelete: SetNull)
+  products    Product[]
+  sortOrder   Int       @default(0) @map("sort_order")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("case_studies")
+}
+
+/// Headline figure in the trust bar, e.g. "500+" «хэрэглэгч байгууллага». When there are
+/// none, the site shows counts computed from the data (modules, products, guides).
+/// Figure in the home page trust bar: «500+» (value) · «хэрэглэгч байгууллага» (label).
+model CompanyStat {
+  id        String   @id @default(cuid(2))
+  value     String   @db.VarChar(40)
+  label     String   @db.VarChar(120)
+  /// Small print under the label saying where the figure comes from or when it was true, e.g. «2025 оны байдлаар».
+  note      String?  @db.VarChar(80)
+  isPublic  Boolean  @default(true) @map("is_public")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("company_stats")
+}
+
+/// A row of the product comparison table on /products.
+model ComparisonRow {
+  id        String           @id @default(cuid(2))
+  label     String           @db.VarChar(160)
+  sortOrder Int              @default(0) @map("sort_order")
+  cells     ComparisonCell[]
+
+  @@map("comparison_rows")
+}
+
+/// One product's value in a comparison row: free text, or "✓" / "—".
+model ComparisonCell {
+  id        String        @id @default(cuid(2))
+  rowId     String        @map("row_id")
+  row       ComparisonRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  productId String        @map("product_id")
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  value     String        @db.VarChar(255)
+
+  @@unique([rowId, productId])
+  @@index([productId])
+  @@map("comparison_cells")
+}

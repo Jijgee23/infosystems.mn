@@ -1,0 +1,78 @@
+"use client";
+
+import { useActionState, useEffect, useRef } from "react";
+import { Lock, Mail } from "@/components/site/icons";
+import { ActionForm } from "@/components/ui/action-form";
+import { ErrorAlert, IconInput, PasswordInput, useFieldErrors } from "@/components/ui/auth-fields";
+import { Button, Field } from "@/components/ui/form";
+import { staffLogin } from "@/lib/actions/auth";
+
+export function StaffLoginForm() {
+  const [state, action, pending] = useActionState(staffLogin, null);
+  const { error, onEdit, attempt } = useFieldErrors(state);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const nextRef = useRef<HTMLInputElement>(null);
+
+  // Where the proxy sent us from, e.g. /admin/login?next=/admin/posts.
+  useEffect(() => {
+    if (nextRef.current) nextRef.current.value = new URLSearchParams(location.search).get("next") ?? "";
+  }, []);
+
+  // After a failed attempt, put the cursor where the user needs to type next.
+  useEffect(() => {
+    if (!state || state.ok) return;
+    if (state.errors?.email) emailRef.current?.focus();
+    else if (state.errors?.password || state.code === "invalid") passwordRef.current?.select();
+  }, [state]);
+
+  return (
+    <ActionForm action={action} className="space-y-5" noValidate>
+      <input name="next" ref={nextRef} type="hidden" />
+
+      {state?.message && <ErrorAlert key={attempt}>{state.message}</ErrorAlert>}
+
+      <fieldset className="space-y-5" disabled={pending}>
+        <Field error={error("email")} label="И-мэйл">
+          <IconInput
+            autoCapitalize="none"
+            autoComplete="username"
+            autoFocus
+            defaultValue={state?.values?.email}
+            icon={Mail}
+            inputMode="email"
+            invalid={!!error("email")}
+            name="email"
+            onChange={onEdit("email")}
+            placeholder="name@infosystems.mn"
+            ref={emailRef}
+            spellCheck={false}
+            type="email"
+          />
+        </Field>
+        <Field error={error("password")} label="Нууц үг">
+          <PasswordInput
+            autoComplete="current-password"
+            icon={Lock}
+            invalid={!!error("password")}
+            name="password"
+            onChange={onEdit("password")}
+            placeholder="••••••••"
+            ref={passwordRef}
+          />
+        </Field>
+      </fieldset>
+
+      <Button className="w-full" disabled={pending}>
+        {pending ? (
+          <>
+            <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            Нэвтэрч байна…
+          </>
+        ) : (
+          "Нэвтрэх"
+        )}
+      </Button>
+    </ActionForm>
+  );
+}
