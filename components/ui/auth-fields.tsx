@@ -41,13 +41,17 @@ export function ErrorAlert({ children }: { children: ReactNode }) {
 }
 
 const ICON = "pointer-events-none absolute top-1/2 left-4 mt-0.75 size-4.5 -translate-y-1/2 text-fg-subtle";
+// Room for the icon / show-hide button. `!` because `.admin-ui .ui-input` (globals.css) sets
+// padding-inline outside any layer, which beats plain utilities on /admin/login.
+const ICON_PAD = "pl-11!";
+const BUTTON_PAD = "pr-12!";
 
 /** Input with a leading icon. */
 export function IconInput({ icon: Icon, className, ...props }: ComponentProps<typeof Input> & { icon: (p: { className?: string }) => ReactNode }) {
   return (
     <span className="relative block">
       <Icon className={ICON} />
-      <Input className={`pl-11 ${className ?? ""}`} {...props} />
+      <Input className={`${ICON_PAD} ${className ?? ""}`} {...props} />
     </span>
   );
 }
@@ -68,7 +72,7 @@ export function PasswordInput({
         {Icon && <Icon className={ICON} />}
         <Input
           {...props}
-          className={`pr-12 ${Icon ? "pl-11" : ""} ${props.className ?? ""}`}
+          className={`${BUTTON_PAD} ${Icon ? ICON_PAD : ""} ${props.className ?? ""}`}
           onBlur={() => setCapsLock(false)}
           onKeyDown={checkCaps}
           onKeyUp={checkCaps}

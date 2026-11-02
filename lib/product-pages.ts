@@ -6,6 +6,5 @@
 export const LEGACY_PRODUCT_PAGES: Record<string, string> = {
   macs: "/products/macs-erp",
   "macs-human-capital": "/products/macs-erp/hr-payroll",
-  carservice: "/solutions/auto-service",
   "farmacy-pos": "/solutions/pharmacy",
 };

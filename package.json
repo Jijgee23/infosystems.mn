@@ -10,6 +10,7 @@
     "db:import": "tsx scripts/migrate-from-strapi.ts",
     "db:products": "tsx scripts/import-product-content.ts",
     "db:guides": "tsx scripts/import-guide-content.ts",
+    "db:site-products": "tsx scripts/import-site-products.ts",
     "create-admin": "tsx scripts/create-admin.ts",
     "db:privatize": "tsx scripts/privatize-files.ts",
     "db:image-sizes": "tsx scripts/backfill-image-sizes.ts",

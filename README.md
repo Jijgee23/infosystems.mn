@@ -40,17 +40,20 @@ Edit `prisma/schema.prisma`, then run `npm run db:migrate -- --name <change>`. C
    mysqldump -u <user> -p infodata > infodata-$(date +%F).sql
    ```
 2. Copy the Strapi uploads into the new upload dir, for example `rsync -a /path/to/strapi/public/uploads/ /var/www/infosystems/uploads/`, and set `UPLOAD_DIR`.
-3. On the server, run `npm ci && npm run build && npm run db:deploy && npm run db:import -- infodata-….sql --reset && npm run db:products && npm run db:guides && npm run db:privatize -- --apply && npm run db:image-sizes && npx prisma db seed`. `db:privatize` moves issue attachments out of the public upload dir (run it without `--apply` first to see the list); `db:image-sizes` records the pixel size of images that lack it, which `next/image` uses to reserve their space. `db:products` loads the product pages from `prisma/data/product-content.json` (see below); `db:guides` loads the help guides from `prisma/data/guide-content.json`; the seed fills the company profile, the About timeline and the downloads list.
+3. On the server, run `npm ci && npm run build && npm run db:deploy && npm run db:import -- infodata-….sql --reset && npm run db:products && npm run db:site-products && npm run db:guides && npm run db:privatize -- --apply && npm run db:image-sizes && npx prisma db seed`. `db:privatize` moves issue attachments out of the public upload dir (run it without `--apply` first to see the list); `db:image-sizes` records the pixel size of images that lack it, which `next/image` uses to reserve their space. `db:products` loads the product pages from `prisma/data/product-content.json` (see below); `db:guides` loads the help guides from `prisma/data/guide-content.json`; the seed fills the company profile, the About timeline and the downloads list.
 4. Start the app with `pm2 start ecosystem.config.js --env production`. It runs one process on port 3000 with `TZ=Asia/Ulaanbaatar`.
 5. In nginx, send **everything**, including `/api/` and `/uploads/`, to `127.0.0.1:3000`. Remove the old `/api` → `:1337` rule. Set `client_max_body_size 60m;`. Pass the client address with `proxy_set_header X-Real-IP $remote_addr;` and `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`: rate limits key on `X-Real-IP` (or the last `X-Forwarded-For` hop), and without them every visitor shares one limit.
-6. Keep Strapi and the MySQL DB stopped but intact for a while so you can roll back.
-7. **Rotate every secret.** The old repo has hardcoded DB, SMTP and JWT passwords. Use new values for `AUTH_SECRET`, `LICENSE_JWT_SECRET`, the SMTP password and the DB password.
+6. Point an uptime monitor (UptimeRobot, Better Stack, ...) at `https://infosystems.mn/api/health`, checking every 1–5 minutes and alerting on any non-200. It answers 200 `{"status":"ok","db":"ok",...}` when the app is up and Postgres answers within 3 seconds, and 503 otherwise (the cause is logged to PM2 as `[health]`). `HEAD` works too.
+7. Keep Strapi and the MySQL DB stopped but intact for a while so you can roll back.
+8. **Rotate every secret.** The old repo has hardcoded DB, SMTP and JWT passwords. Use new values for `AUTH_SECRET`, `LICENSE_JWT_SECRET`, the SMTP password and the DB password.
 
 ## Product pages
 
 Every product page (`/products/<slug>`, modules at `/products/<parent>/<slug>`), the `/products` list and the header menu are built from the `products` table and its `product_blocks` (text, feature cards, links), edited in **Admin › Бүтээгдэхүүн**. `group` places a product on `/products` (main box, featured card or «Бусад систем»), `listed` hides it from lists without removing the page, and `parentId` makes it a module.
 
 The initial content was taken from the hand-written pages of the new design into `prisma/data/product-content.json`. `npm run db:products` loads it into products that have no blocks yet; `-- --force` resets them to the file (discarding admin edits). It also renames the old Strapi product `macs` to `macs-erp`, keeping its customers and issues.
+
+Pharmo, Carservice and TimeTry, plus the integration / «Яагаад MACS ERP» / implementation sections of MACS ERP, were written from the products' own sites (pharmo.mn, carservice.mn, timetry.macs.mn, macs.mn) into `prisma/data/site-products.json`. `npm run db:site-products` (after `db:products`) creates or updates those products in place, keeping their customers, and replaces their blocks (overwriting admin edits to them); for MACS ERP it only adds the sections it doesn't have yet. Like the other `db:` scripts it writes to the DB directly, so run it before `npm run build`, or restart the dev server, or the cached pages keep the old content.
 
 ## Guides and downloads
 

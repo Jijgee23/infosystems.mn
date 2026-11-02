@@ -3,6 +3,7 @@ import Link from "next/link";
 import { HomeGuides } from "@/components/site/home-guides";
 import { HomeNews } from "@/components/site/home-news";
 import { HomeProducts } from "@/components/site/home-products";
+import { IndustryPicker } from "@/components/site/industry-picker";
 import { CaseStudies, ClientLogos, Testimonials, TrustBar } from "@/components/site/trust";
 import { CtaContacts } from "@/components/site/cta-contacts";
 
@@ -19,6 +20,7 @@ export default function HomePage() {
         <div className="pointer-events-none absolute -top-48 right-[-10%] h-[560px] w-[760px] rounded-full bg-brand/12 blur-3xl" />
         <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 max-w-7xl relative grid items-center gap-10 pt-10 pb-12 sm:pt-14 lg:grid-cols-12 lg:gap-12 lg:pt-20 lg:pb-16">
           <div className="lg:col-span-6">
+            <p className="mb-4 text-sm font-semibold tracking-wide text-brand">InfoSystems Mongolia · MACS ERP</p>
             <h1 className="text-4xl leading-[1.08] font-extrabold text-fg sm:text-5xl lg:text-[3.1rem] xl:text-[3.4rem]">
               Санхүү, бүртгэлээ{" "}
               <span className="bg-gradient-to-r from-brand to-accent bg-clip-text text-transparent">нэг системээр</span>
@@ -114,6 +116,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      <IndustryPicker />
       <TrustBar />
       <ClientLogos />
       <section className="scroll-mt-20 py-16 sm:py-20" id="products">

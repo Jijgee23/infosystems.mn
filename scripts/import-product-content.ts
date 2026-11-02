@@ -33,8 +33,11 @@ type Entry = {
   blocks: Block[];
 };
 
-/** Old Strapi products whose content now lives on another page (see lib/product-pages.ts). */
-const UNLISTED = ["macs-human-capital", "carservice", "farmacy-pos"];
+/**
+ * Old Strapi products whose content now lives on another page (see lib/product-pages.ts).
+ * carservice has its own page again (scripts/import-site-products.ts).
+ */
+const UNLISTED = ["macs-human-capital", "farmacy-pos"];
 const RENAMED: Record<string, string> = { macs: "macs-erp" };
 
 const force = process.argv.includes("--force");
