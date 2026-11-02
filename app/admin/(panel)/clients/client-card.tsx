@@ -25,7 +25,8 @@ export function ClientCard({ item: c }: { item: C | null }) {
       <ActionForm action={action} className="flex flex-col gap-4" key={formKey}>
         {c && <input name="id" type="hidden" value={c.id} />}
         <div className="mx-auto w-full max-w-[12rem]">
-          <ImageUpload aspect="aspect-[3/2]" currentUrl={c?.logoUrl ?? null} error={err("logo")} maxSide={600} name="logo" required={!c} />
+          <ImageUpload aspect="aspect-[2/1]" currentUrl={c?.logoUrl ?? null} error={err("logo")} maxSide={1600} name="logo" required={!c} />
+          <p className="mt-1.5 text-xs text-fg-subtle">Хадгалахад илүү зайг нь тайрч, 600×300 стандарт хэмжээнд оруулна.</p>
         </div>
         <Field error={err("name")} label="Байгууллагын нэр *">
           <Input className="h-10" defaultValue={c?.name} invalid={!!err("name")} name="name" required />

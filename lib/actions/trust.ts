@@ -8,6 +8,7 @@ import { requireStaff } from "@/lib/auth/session";
 import { PRODUCTS_TAG } from "@/lib/data/products";
 import { autoStatTemplates, getStatTokens, TRUST_TAG } from "@/lib/data/trust";
 import { db } from "@/lib/db";
+import { normalizeLogo } from "@/lib/logo-image";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { slugify } from "@/lib/slug";
 import { IMAGE_TYPES, saveUpload, UploadError } from "@/lib/uploads";
@@ -27,9 +28,22 @@ function changed() {
  * An image field of the form: a new upload → its file id, the `remove_<field>` box → null,
  * otherwise undefined (unchanged). Throws UploadError with a user-facing message.
  */
-async function picture(formData: FormData, field: string) {
+async function picture(formData: FormData, field: string, opts: { /** Store as the standard 600×300 logo (lib/logo-image). */ logo?: boolean } = {}) {
   const upload = formData.get(field);
   if (upload instanceof File && upload.size > 0) {
+    if (opts.logo) {
+      if (!IMAGE_TYPES.includes(upload.type)) throw new UploadError(`Зөвшөөрөгдөөгүй файлын төрөл: ${upload.name}`);
+      if (upload.size > 8 * 1024 * 1024) throw new UploadError(`Файл хэт том байна (8MB хүртэл): ${upload.name}`);
+      let png: Buffer;
+      try {
+        png = await normalizeLogo(Buffer.from(await upload.arrayBuffer()));
+      } catch {
+        throw new UploadError("Зургийн файлыг уншиж чадсангүй.");
+      }
+      const name = `${upload.name.replace(/\.[^.]+$/, "")}.png`;
+      // saveUpload records the size itself (600×300), so the browser-sent dimensions are ignored.
+      return (await saveUpload(new File([new Uint8Array(png)], name, { type: "image/png" }), { types: ["image/png"] })).id;
+    }
     const file = await saveUpload(upload, { types: IMAGE_TYPES, maxBytes: 8 * 1024 * 1024 });
     const dim = (k: string) => {
       const n = Number(formData.get(`${field}${k}`));
@@ -106,7 +120,7 @@ export async function saveClientLogo(_prev: FormState, formData: FormData): Prom
   if (!parsed.success) return { ok: false, message: "Талбаруудаа шалгана уу.", errors: errorsOf(parsed.error) };
   let logoId: string | null | undefined;
   try {
-    logoId = await picture(formData, "logo");
+    logoId = await picture(formData, "logo", { logo: true });
   } catch (e) {
     return uploadError("logo", e);
   }
