@@ -6,8 +6,8 @@
  * left in place (row and disk), so nothing is lost. Logos already in the standard size are
  * skipped, so it is safe to run more than once.
  *
- *   npm run db:logos             # dry run: lists what would change
- *   npm run db:logos -- --apply  # writes the new files and updates the rows
+ *   npx tsx scripts/normalize-client-logos.ts           # dry run: lists what would change
+ *   npx tsx scripts/normalize-client-logos.ts --apply   # writes the new files and updates the rows
  */
 import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
