@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { Combobox, type SelectProps } from "./combobox";
 
 const cn = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -24,8 +25,9 @@ export function Textarea({ className, invalid, ...props }: ComponentProps<"texta
   return <textarea aria-invalid={invalid || undefined} className={cn(inputClass, "resize-y py-3", className)} {...props} />;
 }
 
-export function Select({ className, ...props }: ComponentProps<"select">) {
-  return <select className={cn(inputClass, "h-12", className)} {...props} />;
+/** Modern, searchable dropdown (see ./combobox). Keeps the native <select> API. */
+export function Select(props: SelectProps) {
+  return <Combobox {...props} />;
 }
 
 const BUTTON = {
