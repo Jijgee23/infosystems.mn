@@ -30,7 +30,7 @@ export default async function ClientsPage() {
             }
             key={c.id}
             summary={
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <span className="grid h-10 w-20 shrink-0 place-items-center rounded-lg border border-line bg-white p-1">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img alt="" className="max-h-full max-w-full object-contain" src={c.logo.url} />
