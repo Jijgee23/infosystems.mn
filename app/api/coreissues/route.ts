@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { strapiError } from "@/lib/legacy";
-import { escapeHtml, NOTIFY_EMAIL, sendMail } from "@/lib/mail";
+import { escapeHtml, NOTIFY_TO, SITE_URL, sendMail } from "@/lib/mail";
 import { isRateLimited } from "@/lib/rate-limit";
 import { IMAGE_TYPES, saveUpload, UploadError } from "@/lib/uploads";
 
@@ -61,7 +61,25 @@ export async function POST(req: Request) {
     },
   });
 
-  await sendMail({ to: NOTIFY_EMAIL, subject: `[infosystems.mn] Төслийн асуудал — ${title ?? ""}`, html: `<p>${escapeHtml(description ?? "")}</p>` });
+  const reporter = str(data.email, 255);
+  await sendMail({
+    to: NOTIFY_TO,
+    replyTo: reporter ?? undefined,
+    subject: `Төслийн асуудал — ${title ?? ""} · InfoSystems`,
+    content: {
+      kicker: "Төслийн асуудал",
+      title: title ?? "Шинэ асуудал",
+      intro: "Төслийн программаас шинэ асуудал ирлээ.",
+      fields: [
+        { label: "Илгээсэн", value: str(data.name, 255) },
+        { label: "И-мэйл", value: reporter },
+        { label: "Хавсралт", value: files.length ? `${files.length} файл` : null },
+      ],
+      message: { label: "Тайлбар", value: description },
+      button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/core-issues` },
+      footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
+    },
+  });
 
   return Response.json({
     id: row.id,

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSession, destroySession, isStaffRole } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { escapeHtml, NOTIFY_EMAIL, sendMail } from "@/lib/mail";
+import { NOTIFY_TO, sendMail } from "@/lib/mail";
 import { attemptLimiter, isRateLimited } from "@/lib/rate-limit";
 import { COMPANY_REGISTER, normalizePersonalRegister, PERSONAL_REGISTER } from "@/lib/register-number";
 import type { FormState } from "./contact";
@@ -194,14 +194,26 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
       passwordChangedAt: new Date(),
     },
   });
-  const who =
-    d.customerType === "company"
-      ? `<b>${escapeHtml(d.companyName)}</b> (байгууллага, РД ${d.companyRegister})<br>${escapeHtml(d.username)}`
-      : `<b>${escapeHtml(d.username)}</b> (хувь хүн, РД ${escapeHtml(d.personalRegister)})`;
+  const isCompany = d.customerType === "company";
   await sendMail({
-    to: NOTIFY_EMAIL,
-    subject: `[infosystems.mn] Шинэ бүртгэл — ${d.customerType === "company" ? d.companyName : d.username}`,
-    html: `<p>Шинэ харилцагч бүртгүүлж, баталгаажуулалт хүлээж байна.</p><p>${who} · ${escapeHtml(email)}</p><p><a href="${SITE_URL}/admin/users">Админ хэсэгт харах</a></p>`,
+    to: NOTIFY_TO,
+    replyTo: email,
+    subject: `Шинэ бүртгэл — ${isCompany ? d.companyName : d.username} · InfoSystems`,
+    content: {
+      kicker: "Шинэ бүртгэл",
+      title: "Шинэ харилцагч баталгаажуулалт хүлээж байна",
+      intro: "Харилцагчийн буланд шинэ бүртгэл ирлээ. Шалгаад баталгаажуулна уу.",
+      sectionTitle: "Бүртгэлийн мэдээлэл",
+      fields: [
+        { label: "Төрөл", value: isCompany ? "Байгууллага" : "Хувь хүн" },
+        { label: "Байгууллага", value: isCompany ? d.companyName : null },
+        { label: "Регистр", value: isCompany ? String(d.companyRegister) : d.personalRegister },
+        { label: "Нэр", value: d.username },
+        { label: "И-мэйл", value: email },
+      ],
+      button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/users` },
+      footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
+    },
   });
   return { ok: true, message: "Бүртгэл хүлээн авлаа. Манай ажилтан баталгаажуулсны дараа и-мэйлээр мэдэгдэнэ." };
 }
@@ -221,8 +233,14 @@ export async function requestPasswordReset(_prev: FormState, formData: FormData)
   const link = `${SITE_URL}/portal/reset-password?token=${token}`;
   await sendMail({
     to: user.email,
-    subject: "infosystems.mn — нууц үг сэргээх",
-    html: `<p>Сайн байна уу,</p><p>Нууц үгээ шинэчлэхийн тулд доорх холбоосоор орно уу (1 цагийн хугацаанд хүчинтэй):</p><p><a href="${link}">${link}</a></p><p>Хэрэв та хүсэлт илгээгээгүй бол энэ захидлыг үл тоомсорлоно уу.</p>`,
+    subject: "Нууц үг сэргээх · InfoSystems",
+    content: {
+      kicker: "Харилцагчийн булан",
+      title: "Нууц үгээ шинэчлэх",
+      intro: "Сайн байна уу. Таны бүртгэлийн нууц үгийг сэргээх хүсэлт ирлээ. Доорх товчоор орж шинэ нууц үг тохируулна уу.",
+      button: { label: "Нууц үг шинэчлэх", url: link },
+      note: "Холбоос 1 цагийн хугацаанд хүчинтэй. Хэрэв та хүсэлт илгээгээгүй бол энэ захидлыг үл тоомсорлоно уу.",
+    },
   });
   return done;
 }

@@ -155,8 +155,13 @@ export async function updateUser(_prev: FormState, formData: FormData): Promise<
     // Same message the old /emails endpoint sent on approval.
     await sendMail({
       to: email,
-      subject: "infosystems.mn — бүртгэл баталгаажлаа",
-      html: `<p>Сайн байна уу,</p><p>Таны <b>infosystems.mn</b> дээрх бүртгэл баталгаажлаа. Та одоо <a href="${SITE_URL}/portal/login">харилцагчийн булан</a>-д нэвтэрч асуудал, санал хүсэлтээ илгээх боломжтой.</p><p>Инфосистемс Монголиа ХХК</p>`,
+      subject: "Таны бүртгэл баталгаажлаа · InfoSystems",
+      content: {
+        kicker: "Харилцагчийн булан",
+        title: "Таны бүртгэл баталгаажлаа",
+        intro: "Сайн байна уу. Таны infosystems.mn дээрх бүртгэл баталгаажлаа. Та одоо харилцагчийн буланд нэвтэрч асуудал, санал хүсэлтээ илгээх боломжтой.",
+        button: { label: "Нэвтрэх", url: `${SITE_URL}/portal/login` },
+      },
     });
   }
   refresh();

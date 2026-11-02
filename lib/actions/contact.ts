@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { escapeHtml, NOTIFY_EMAIL, sendMail } from "@/lib/mail";
+import { NOTIFY_TO, sendMail, workingHours } from "@/lib/mail";
 import { isRateLimited } from "@/lib/rate-limit";
 
 export type FormState = { ok: boolean; message: string; errors?: Record<string, string>; code?: string; values?: Record<string, string> } | null;
@@ -28,16 +28,44 @@ function fieldErrors(error: z.ZodError) {
   return Object.fromEntries(error.issues.map((i) => [String(i.path[0]), i.message]));
 }
 
-async function notifyStaff(kind: keyof typeof KIND_LABEL, fields: Record<string, string | undefined>, replyTo?: string) {
-  const rows = Object.entries(fields)
-    .filter(([, v]) => v)
-    .map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#66727f">${k}</td><td>${escapeHtml(v!).replace(/\n/g, "<br>")}</td></tr>`)
-    .join("");
+const TITLE = {
+  demo: "Таны демо хүсэлтийг хүлээн авлаа",
+  quote: "Таны үнийн саналын хүсэлтийг хүлээн авлаа",
+  feedback: "Таны санал хүсэлтийг хүлээн авлаа",
+  notify: "Таныг бүртгэж авлаа",
+} as const;
+
+/**
+ * One email per request, as on macs.mn: to the team inbox with the visitor in CC (their
+ * confirmation, so the text addresses them) and Reply-To the visitor.
+ */
+async function notifyRequest(kind: keyof typeof KIND_LABEL, d: { name?: string; company?: string; phone?: string; email: string; product?: string; message?: string }) {
+  const hours = await workingHours();
+  const when = hours ? `ажлын цагаар (${hours})` : "ажлын 1 өдөрт багтаан";
+  const intro =
+    kind === "notify"
+      ? `Сайн байна уу, ${d.product ?? "бүтээгдэхүүн"}-ий нээлтийн мэдээг авахаар бүртгүүлсэнд баярлалаа. Нээгдмэгц энэ хаягаар мэдэгдэнэ.`
+      : `Сайн байна уу${d.name ? `, ${d.name}` : ""}. InfoSystems Mongolia-д хандсанд баярлалаа. Манай мэргэжилтэн ${when} тантай холбогдоно.`;
+  const who = d.company || d.name || d.email;
   await sendMail({
-    to: NOTIFY_EMAIL,
-    replyTo,
-    subject: `[infosystems.mn] ${KIND_LABEL[kind]}${fields["Нэр"] ? ` — ${fields["Нэр"]}` : ""}`,
-    html: `<h2 style="font-family:sans-serif">${KIND_LABEL[kind]}</h2><table style="font-family:sans-serif;font-size:14px">${rows}</table>`,
+    to: NOTIFY_TO,
+    cc: d.email,
+    replyTo: d.email,
+    subject: `${KIND_LABEL[kind]} — ${who} · InfoSystems`,
+    content: {
+      kicker: KIND_LABEL[kind],
+      title: TITLE[kind],
+      intro,
+      sectionTitle: "Таны илгээсэн мэдээлэл",
+      fields: [
+        { label: "Нэр", value: d.name },
+        { label: "Байгууллага", value: d.company },
+        { label: "Утас", value: d.phone },
+        { label: "И-мэйл", value: d.email },
+        { label: "Бүтээгдэхүүн", value: d.product },
+      ],
+      message: { label: "Мессеж", value: d.message },
+    },
   });
 }
 
@@ -62,11 +90,7 @@ export async function submitContact(_prev: FormState, formData: FormData): Promi
       message: d.message || null,
     },
   });
-  await notifyStaff(
-    d.kind,
-    { Нэр: d.name, Байгууллага: d.company, Утас: d.phone, "И-мэйл": d.email, Бүтээгдэхүүн: d.product, Мессеж: d.message },
-    d.email,
-  );
+  await notifyRequest(d.kind, d);
   return { ok: true, message: "Хүсэлтийг хүлээн авлаа. Бид ажлын 1 өдөрт багтаан тантай холбогдоно." };
 }
 
@@ -79,6 +103,6 @@ export async function submitNotify(_prev: FormState, formData: FormData): Promis
   const parsed = NotifySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message, errors: fieldErrors(parsed.error) };
   await db.contactRequest.create({ data: { kind: "notify", email: parsed.data.email, product: parsed.data.product } });
-  await notifyStaff("notify", { "И-мэйл": parsed.data.email, Бүтээгдэхүүн: parsed.data.product });
+  await notifyRequest("notify", parsed.data);
   return { ok: true, message: "Бүртгэгдлээ. Нээлтийн мэдээг тань руу илгээнэ." };
 }

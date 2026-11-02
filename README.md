@@ -6,7 +6,7 @@ The new infosystems.mn site, built with Next.js 16, Postgres and Prisma 7. It re
 |---|---|---|
 | Public site | `app/(site)/*` | Converted from `../InfoSystems_new_front` |
 | News | `/news`, `/news/[slug]` | Read from the DB and cached with `"use cache"` + `cacheTag("posts")` |
-| Contact / demo form | `/contact` → `lib/actions/contact.ts` | Saved to `contact_requests`, then emailed to `NOTIFY_EMAIL` |
+| Contact / demo form | `/contact` → `lib/actions/contact.ts` | Saved to `contact_requests`, then emailed to `NOTIFY_TO` with the visitor in CC (their confirmation) |
 | Customer portal | `/portal` | Sign in with a company register number or email plus password. Customers can file issues and reply |
 | Admin | `/admin` | Roles `admin` and `employee` |
 | Desktop app API | `/api/news-check`, `/api/version-infos`, `/api/auth/local`, `/api/checkcustomerlicense`, `/api/bankrate`, `/api/coreissues` | Same request and response shapes as Strapi |
@@ -27,7 +27,7 @@ npm run dev
 
 `npm run db:import -- <dump> --dry` only parses the dump and prints row counts.
 
-When `SMTP_HOST` is empty, emails are written to the console instead of being sent.
+Email is set up as on macs.mn: the `no_reply@infosystems.mn` account on `smtp.mail.mn:465` (`SMTP_*` in `.env.example`), every message rendered from `lib/mail-template.ts` (HTML in the site's design + plain text). When `SMTP_HOST` is empty, emails are written to the console instead of being sent.
 
 ## Schema changes
 

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getSessionUser, isStaff, LOGIN_PATH, type Realm } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { escapeHtml, NOTIFY_EMAIL, sendMail } from "@/lib/mail";
+import { NOTIFY_TO, sendMail } from "@/lib/mail";
 import { textToHtml } from "@/lib/sanitize";
 import fs from "node:fs/promises";
 import { filesFrom, filePath, IMAGE_TYPES, DOC_TYPES, saveUpload, UploadError } from "@/lib/uploads";
@@ -57,9 +57,17 @@ export async function createIssue(_prev: FormState, formData: FormData): Promise
   });
 
   await sendMail({
-    to: NOTIFY_EMAIL,
-    subject: `[infosystems.mn] Шинэ асуудал — ${user.companyName ?? user.username}`,
-    html: `<p><b>${escapeHtml(title)}</b></p>${textToHtml(content)}<p><a href="${SITE_URL}/admin/issues/${issue.id}">Админ хэсэгт харах</a></p>`,
+    to: NOTIFY_TO,
+    replyTo: user.email,
+    subject: `Шинэ асуудал — ${user.companyName ?? user.username} · InfoSystems`,
+    content: {
+      kicker: "Шинэ асуудал",
+      title,
+      intro: `${user.companyName ?? user.username} харилцагчийн булангаас шинэ асуудал илгээлээ.`,
+      bodyHtml: textToHtml(content),
+      button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/issues/${issue.id}` },
+      footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
+    },
   });
   redirect(`/portal/issues/${issue.id}`);
 }
@@ -87,14 +95,29 @@ export async function replyToIssue(realm: Realm, _prev: FormState, formData: For
   if (staff && issue.user?.email) {
     await sendMail({
       to: issue.user.email,
-      subject: `infosystems.mn — "${issue.title}" асуудалд хариулт ирлээ`,
-      html: `${textToHtml(content)}<p><a href="${SITE_URL}/portal/issues/${issueId}">Харилцагчийн булан дээр харах</a></p>`,
+      replyTo: NOTIFY_TO,
+      subject: `«${issue.title}» асуудалд хариулт ирлээ · InfoSystems`,
+      content: {
+        kicker: "Асуудлын хариулт",
+        title: issue.title,
+        intro: "Сайн байна уу. Таны илгээсэн асуудалд манай мэргэжилтэн хариулт бичлээ.",
+        bodyHtml: textToHtml(content),
+        button: { label: "Харилцагчийн буланд харах", url: `${SITE_URL}/portal/issues/${issueId}` },
+      },
     });
   } else if (!staff) {
     await sendMail({
-      to: NOTIFY_EMAIL,
-      subject: `[infosystems.mn] Асуудалд нэмэлт — ${issue.title}`,
-      html: `${textToHtml(content)}<p><a href="${SITE_URL}/admin/issues/${issueId}">Админ хэсэгт харах</a></p>`,
+      to: NOTIFY_TO,
+      replyTo: user.email,
+      subject: `Асуудалд нэмэлт — ${issue.title} · InfoSystems`,
+      content: {
+        kicker: "Асуудалд нэмэлт",
+        title: issue.title,
+        intro: `${user.companyName ?? user.username} асуудалдаа нэмэлт бичлээ.`,
+        bodyHtml: textToHtml(content),
+        button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/issues/${issueId}` },
+        footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
+      },
     });
   }
   refresh();
