@@ -14,6 +14,14 @@ import { ProductForm } from "../product-form";
 
 export const metadata = { title: "Бүтээгдэхүүн засах" };
 
+const TABS = [
+  { key: "profile", label: "Үндсэн мэдээлэл" },
+  { key: "content", label: "Хуудасны агуулга" },
+  { key: "modules", label: "Модулиуд", parentOnly: true },
+  { key: "customers", label: "Харилцагчид", parentOnly: true },
+] as const;
+type Tab = (typeof TABS)[number]["key"];
+
 /** Feature card text is stored as <p> paragraphs and edited as plain text with blank lines between them. */
 const paragraphsToText = (html: string | null) =>
   (html ?? "")
@@ -59,6 +67,13 @@ export default async function EditProductPage({ params, searchParams }: PageProp
   const toCustomer = (u: (typeof customers)[number]) => ({ id: u.id, name: u.companyName || u.username, register: toNum(u.companyRegister)?.toString() ?? "", email: u.email });
   const publicHref = product.parent ? `/products/${product.parent.slug}/${product.slug}` : `/products/${product.slug}`;
 
+  // Modules (products with a parent) have no sub-modules or customers of their own.
+  const isParent = !product.parent;
+  const tabs = TABS.filter((t) => isParent || !("parentOnly" in t));
+  const requested = (await searchParams).tab;
+  const tab: Tab = tabs.some((t) => t.key === requested) ? (requested as Tab) : "profile";
+  const tabHref = (key: Tab) => (key === "profile" ? `/admin/products/${product.id}` : `/admin/products/${product.id}?tab=${key}`);
+
   return (
     <>
       <Link className="text-sm font-medium text-fg-muted hover:text-brand" href={product.parent ? `/admin/products/${product.parent.id}` : "/admin/products"}>
@@ -82,57 +97,88 @@ export default async function EditProductPage({ params, searchParams }: PageProp
           title={product.name}
         />
       </div>
-      <ProductForm
-        currentMain={parents.find((x) => x.group === "main")?.name}
-        hasModules={product.modules.length > 0}
-        parents={parents}
-        product={{
-          id: product.id,
-          name: product.name,
-          title: product.title === product.name ? "" : product.title,
-          slug: product.slug,
-          tagline: product.tagline ?? "",
-          icon: product.icon ?? "",
-          badge: product.badge ?? "",
-          status: product.status,
-          group: product.group,
-          sortOrder: product.sortOrder,
-          parentId: product.parentId ?? "",
-          listed: product.listed,
-          published: !!product.publishedAt,
-          imageUrl: product.image?.url ?? null,
-          logoUrl: product.logo?.url ?? null,
-          backgroundUrl: product.background?.url ?? null,
-          videoUrl: product.videoUrl ?? "",
-          versionNames: product.versionNames.join(", "),
-          solutions: product.solutions,
-          inComparison: product.inComparison,
-        }}
-        saved={saved}
-      />
+      <nav aria-label="Хэсгүүд" className="mt-6 mb-6 flex gap-1 overflow-x-auto border-b border-line">
+        {tabs.map((t) => (
+          <Link
+            aria-current={t.key === tab ? "page" : undefined}
+            className="-mb-px shrink-0 border-b-2 border-transparent px-4 py-2.5 text-sm font-medium whitespace-nowrap text-fg-muted transition-colors hover:text-fg aria-[current=page]:border-brand aria-[current=page]:text-fg"
+            href={tabHref(t.key)}
+            key={t.key}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </nav>
 
-      <section className="mt-10">
-        <h2 className="text-lg font-bold text-fg">Хуудасны агуулга</h2>
-        <p className="mt-1 mb-4 text-sm text-fg-muted">Сайтын хуудсанд дээрээс доош энэ дарааллаар гарна. «Холбоосууд» блок хуудасны төгсгөлд гарна.</p>
-        <ProductBlocks
-          blocks={product.blocks.map((b) => ({
-            id: b.id,
-            kind: b.kind,
-            heading: b.heading ?? "",
-            style: b.style ?? "",
-            body: sanitizeHtml(b.body ?? ""),
-            columns: b.columns,
-            items: b.items.map((it) => ({ title: it.title, body: b.kind === "features" ? paragraphsToText(it.body) : (it.body ?? ""), href: it.href ?? "" })),
-          }))}
-          productId={product.id}
-        />
-      </section>
+      {tab === "profile" && (
+        <>
+          <ProductForm
+            currentMain={parents.find((x) => x.group === "main")?.name}
+            hasModules={product.modules.length > 0}
+            parents={parents}
+            product={{
+              id: product.id,
+              name: product.name,
+              title: product.title === product.name ? "" : product.title,
+              slug: product.slug,
+              tagline: product.tagline ?? "",
+              icon: product.icon ?? "",
+              badge: product.badge ?? "",
+              status: product.status,
+              group: product.group,
+              sortOrder: product.sortOrder,
+              parentId: product.parentId ?? "",
+              listed: product.listed,
+              published: !!product.publishedAt,
+              imageUrl: product.image?.url ?? null,
+              logoUrl: product.logo?.url ?? null,
+              backgroundUrl: product.background?.url ?? null,
+              videoUrl: product.videoUrl ?? "",
+              versionNames: product.versionNames.join(", "),
+              solutions: product.solutions,
+              inComparison: product.inComparison,
+            }}
+            saved={saved}
+          />
 
-      {!product.parent && (
-        <section className="mt-10">
+          <div className="mt-10 border-t border-line pt-6">
+            {product.modules.length ? (
+              <p className="text-sm text-fg-muted">Модулиудыг нь устгасны дараа бүтээгдэхүүнийг устгах боломжтой.</p>
+            ) : (
+              <ConfirmButton
+                action={deleteProduct.bind(null, product.id)}
+                confirm={`«${product.name}»-г устгах уу? Хуудасны агуулга, ${product.users.length} харилцагчийн холбоос устана; ${product._count.issues} асуудал бүтээгдэхүүнгүй үлдэнэ.`}
+                variant="danger"
+              >
+                Бүтээгдэхүүн устгах
+              </ConfirmButton>
+            )}
+          </div>
+        </>
+      )}
+
+      {tab === "content" && (
+        <section>
+          <p className="mt-1 mb-4 text-sm text-fg-muted">Сайтын хуудсанд дээрээс доош энэ дарааллаар гарна. «Холбоосууд» блок хуудасны төгсгөлд гарна.</p>
+          <ProductBlocks
+            blocks={product.blocks.map((b) => ({
+              id: b.id,
+              kind: b.kind,
+              heading: b.heading ?? "",
+              style: b.style ?? "",
+              body: sanitizeHtml(b.body ?? ""),
+              columns: b.columns,
+              items: b.items.map((it) => ({ title: it.title, body: b.kind === "features" ? paragraphsToText(it.body) : (it.body ?? ""), href: it.href ?? "" })),
+            }))}
+            productId={product.id}
+          />
+        </section>
+      )}
+
+      {tab === "modules" && (
+        <section>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold text-fg">Модулиуд</h2>
               <p className="text-sm text-fg-muted">/products/{product.slug}/… хаягаар, бүтээгдэхүүний хуудсанд жагсаалтаар гарна.</p>
             </div>
             <Link className="h-9 shrink-0 rounded-full border border-line bg-card px-3.5 py-2 text-sm font-semibold text-fg hover:border-brand/50 hover:text-brand" href={`/admin/products/new?parent=${product.id}`}>
@@ -159,29 +205,13 @@ export default async function EditProductPage({ params, searchParams }: PageProp
         </section>
       )}
 
-      {!product.parent && (
-        <div className="mt-10">
-          <ProductCustomers
-            all={customers.map(toCustomer)}
-            assigned={product.users.map((l) => toCustomer(l.user)).sort((a, b) => a.name.localeCompare(b.name, "mn"))}
-            productId={product.id}
-          />
-        </div>
+      {tab === "customers" && (
+        <ProductCustomers
+          all={customers.map(toCustomer)}
+          assigned={product.users.map((l) => toCustomer(l.user)).sort((a, b) => a.name.localeCompare(b.name, "mn"))}
+          productId={product.id}
+        />
       )}
-
-      <div className="mt-10 border-t border-line pt-6">
-        {product.modules.length ? (
-          <p className="text-sm text-fg-muted">Модулиудыг нь устгасны дараа бүтээгдэхүүнийг устгах боломжтой.</p>
-        ) : (
-          <ConfirmButton
-            action={deleteProduct.bind(null, product.id)}
-            confirm={`«${product.name}»-г устгах уу? Хуудасны агуулга, ${product.users.length} харилцагчийн холбоос устана; ${product._count.issues} асуудал бүтээгдэхүүнгүй үлдэнэ.`}
-            variant="danger"
-          >
-            Бүтээгдэхүүн устгах
-          </ConfirmButton>
-        )}
-      </div>
     </>
   );
 }
