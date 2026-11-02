@@ -27,7 +27,7 @@ function ResetForm() {
   if (state?.ok)
     return (
       <div className="space-y-5">
-        <FormMessage state={state} />
+        <FormMessage keepSuccess state={state} />
         <Link className="font-semibold text-brand hover:underline" href="/portal/login">
           Нэвтрэх
         </Link>
@@ -42,7 +42,7 @@ function ResetForm() {
       <Field label="Нууц үг давтах">
         <Input autoComplete="new-password" name="confirm" required type="password" />
       </Field>
-      <FormMessage state={state} />
+      <FormMessage keepSuccess state={state} />
       <Button className="w-full" disabled={pending || !token}>
         Хадгалах
       </Button>

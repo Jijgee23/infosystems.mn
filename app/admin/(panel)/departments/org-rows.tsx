@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { ActionForm } from "@/components/ui/action-form";
+import { confirmDialog, toast } from "@/components/ui/feedback";
 import { Badge, Button } from "@/components/ui/form";
 import { saveDepartment, savePosition } from "@/lib/actions/company";
 import { useCloseOnSave } from "@/components/admin/list-editor";
@@ -25,25 +26,22 @@ function useResetKey(state: FormState, isNew: boolean) {
 /** Delete with confirm; shows the server's refusal (e.g. the department still has employees). */
 export function DeleteButton({ action, confirm }: { action: () => Promise<FormState>; confirm: string }) {
   const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
   return (
-    <>
-      <button
-        className="h-9 rounded-full px-3.5 text-sm font-semibold text-fg-muted hover:bg-surface hover:text-red-600 disabled:opacity-60"
-        disabled={pending}
-        onClick={() => {
-          if (!window.confirm(confirm)) return;
-          start(async () => {
-            const res = await action();
-            setError(res && !res.ok ? res.message : null);
-          });
-        }}
-        type="button"
-      >
-        Устгах
-      </button>
-      {error && <p className="basis-full text-right text-xs text-red-600 dark:text-red-400">{error}</p>}
-    </>
+    <button
+      className="h-9 rounded-full px-3.5 text-sm font-semibold text-fg-muted hover:bg-surface hover:text-red-600 disabled:opacity-60"
+      disabled={pending}
+      onClick={async () => {
+        if (!(await confirmDialog(confirm))) return;
+        start(async () => {
+          const res = await action();
+          if (res && !res.ok) toast.error(res.message);
+          else toast.success(res?.message || "Устгагдлаа.");
+        });
+      }}
+      type="button"
+    >
+      Устгах
+    </button>
   );
 }
 

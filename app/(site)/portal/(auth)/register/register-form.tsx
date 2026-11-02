@@ -162,7 +162,7 @@ export function RegisterForm() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
 
-  if (state?.ok) return <FormMessage state={state} />;
+  if (state?.ok) return <FormMessage keepSuccess state={state} />;
 
   const regnoHint = {
     idle: "Нэр автоматаар бөглөгдөнө",

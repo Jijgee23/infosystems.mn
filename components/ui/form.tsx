@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import { Combobox, type SelectProps } from "./combobox";
+import { ActionToast } from "./feedback";
 
 const cn = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -49,15 +50,24 @@ export function Button({ variant = "primary", size = "md", className, ...props }
   return <button className={cn(buttonClass(variant, size), className)} type="submit" {...props} />;
 }
 
-export function FormMessage({ state }: { state: { ok: boolean; message: string } | null }) {
+/**
+ * Toasts an action's result; errors also stay inline next to the form. `keepSuccess` keeps
+ * the success text inline too, for pages where it replaces the form («check your email»).
+ */
+export function FormMessage({ state, keepSuccess }: { state: { ok: boolean; message: string } | null; keepSuccess?: boolean }) {
   if (!state?.message) return null;
   return (
-    <p
-      className={cn("rounded-2xl px-4 py-3 text-sm", state.ok ? "bg-accent-soft text-accent-ink" : "bg-red-500/10 text-red-700 dark:text-red-300")}
-      role={state.ok ? "status" : "alert"}
-    >
-      {state.message}
-    </p>
+    <>
+      <ActionToast state={state} />
+      {(!state.ok || keepSuccess) && (
+        <p
+          className={cn("rounded-2xl px-4 py-3 text-sm", state.ok ? "bg-accent-soft text-accent-ink" : "bg-red-500/10 text-red-700 dark:text-red-300")}
+          role={state.ok ? "status" : "alert"}
+        >
+          {state.message}
+        </p>
+      )}
+    </>
   );
 }
 

@@ -5,6 +5,7 @@ import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useRef, useState } from "react";
 import { uploadEditorImage } from "@/lib/actions/admin";
+import { toast } from "@/components/ui/feedback";
 
 /** Tiptap editor that writes its HTML into a hidden input named `name`. */
 export function RichTextEditor({ name, initialHtml, compact }: { name: string; initialHtml: string; compact?: boolean }) {
@@ -56,7 +57,7 @@ export function RichTextEditor({ name, initialHtml, compact }: { name: string; i
     const res = await uploadEditorImage(fd);
     setUploading(false);
     if (res.url) editor.chain().focus().setImage({ src: res.url, alt: "" }).run();
-    else alert(res.error ?? "Зураг оруулахад алдаа гарлаа");
+    else toast.error(res.error ?? "Зураг оруулахад алдаа гарлаа");
   };
 
   const btn = (active: boolean | undefined) =>

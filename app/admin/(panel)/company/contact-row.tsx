@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/feedback";
 import { useActionState, useState, type ReactNode } from "react";
 import { ConfirmButton } from "@/components/admin/confirm-button";
 import { ActionForm } from "@/components/ui/action-form";
@@ -32,7 +33,10 @@ const display = (c: Pick<Contact, "type" | "value">) =>
 function ContactForm({ contact, type, onDone }: { contact: Contact | null; type: Type; onDone: () => void }) {
   const [state, action, pending] = useActionState(async (prev: Awaited<ReturnType<typeof saveContact>>, fd: FormData) => {
     const res = await saveContact(prev, fd);
-    if (res?.ok) onDone();
+    if (res?.ok) {
+      toast.success(res.message || "Хадгалагдлаа.");
+      onDone();
+    }
     return res;
   }, null);
   return (

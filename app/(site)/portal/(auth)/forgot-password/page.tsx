@@ -15,13 +15,13 @@ export default function ForgotPasswordPage() {
       <p className="mt-3 text-fg-muted">Бүртгэлтэй и-мэйл хаягаа оруулбал нууц үг шинэчлэх холбоос илгээнэ.</p>
       <Card className="mt-8">
         {state?.ok ? (
-          <FormMessage state={state} />
+          <FormMessage keepSuccess state={state} />
         ) : (
           <ActionForm action={action} className="space-y-5">
             <Field label="И-мэйл">
               <Input autoComplete="email" name="email" required type="email" />
             </Field>
-            <FormMessage state={state} />
+            <FormMessage keepSuccess state={state} />
             <Button className="w-full" disabled={pending}>
               Холбоос илгээх
             </Button>

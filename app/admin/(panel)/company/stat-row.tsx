@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/feedback";
 import { useActionState, useState } from "react";
 import { ConfirmButton } from "@/components/admin/confirm-button";
 import { ActionForm } from "@/components/ui/action-form";
@@ -16,7 +17,10 @@ const FIELD_LABEL = "mb-1 block text-[11px] font-semibold tracking-wide text-fg-
 function StatForm({ stat, onDone }: { stat: Stat | null; onDone: () => void }) {
   const [state, action, pending] = useActionState(async (prev: Awaited<ReturnType<typeof saveStat>>, fd: FormData) => {
     const res = await saveStat(prev, fd);
-    if (res?.ok) onDone();
+    if (res?.ok) {
+      toast.success(res.message || "Хадгалагдлаа.");
+      onDone();
+    }
     return res;
   }, null);
   return (

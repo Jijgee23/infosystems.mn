@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { CloseContext } from "@/components/admin/list-editor";
+import { confirmDialog, toast } from "@/components/ui/feedback";
 import { Badge, buttonClass } from "@/components/ui/form";
 import { deleteClientLogo } from "@/lib/actions/trust";
 import { ClientCard } from "./client-card";
@@ -18,10 +19,13 @@ function DeleteButton({ id, name }: { id: string; name: string }) {
       className="py-2.5 text-red-600 transition-colors hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
       disabled={pending}
       onClick={() => {
-        if (!window.confirm(`«${name}»-г устгах уу?`)) return;
-        start(async () => {
-          await deleteClientLogo(id);
-        });
+        void (async () => {
+          if (!(await confirmDialog({ title: `«${name}»-г устгах уу?`, description: "Лого сайтаас бүр мөсөн устна." }))) return;
+          start(async () => {
+            await deleteClientLogo(id);
+            toast.success(`«${name}» устгагдлаа.`);
+          });
+        })();
       }}
       type="button"
     >

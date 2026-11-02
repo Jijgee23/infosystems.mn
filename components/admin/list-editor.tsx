@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useActionToast } from "@/components/ui/feedback";
 import { buttonClass } from "@/components/ui/form";
 
 /**
@@ -11,8 +12,10 @@ import { buttonClass } from "@/components/ui/form";
 export const CloseContext = createContext<(() => void) | null>(null);
 
 /** Closes the surrounding NewItem / EditableItem once the form's action reports success. */
-export function useCloseOnSave(state: { ok: boolean } | null | undefined) {
+export function useCloseOnSave(state: { ok: boolean; message?: string } | null | undefined) {
   const close = useContext(CloseContext);
+  // The form closes on success, so its result is reported as a toast instead of inline.
+  useActionToast(state);
   useEffect(() => {
     if (state?.ok) close?.();
   }, [state, close]);
