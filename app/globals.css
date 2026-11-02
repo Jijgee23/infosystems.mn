@@ -248,3 +248,7 @@ h4 {
 @media (prefers-reduced-motion: reduce) {
   [role="alertdialog"], [role="alertdialog"]::backdrop, [aria-live] > * { animation-duration: 1ms !important; }
 }
+/* Client logo marquee (components/site/trust.tsx): the track holds the set twice. */
+@keyframes marquee {
+  to { transform: translateX(-50%); }
+}

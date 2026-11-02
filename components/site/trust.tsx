@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { ArrowRight } from "@/components/site/icons";
 import { getCaseStudies, getClientLogos, getStats, getTestimonials } from "@/lib/data/trust";
 import { StatCards } from "./stat-cards";
@@ -30,38 +31,59 @@ export async function TrustBar() {
   );
 }
 
-/** «Бидэнд итгэдэг байгууллагууд»: client logos; hidden when there are none. */
+/** Seconds each logo takes to cross its own width; sets the marquee speed. */
+const MARQUEE_SECONDS_PER_LOGO = 3;
+/** Logos per half of the track, at least; few logos are repeated so wide screens show no gap. */
+const MARQUEE_MIN_PER_HALF = 12;
+
+/**
+ * «Бидэнд итгэдэг байгууллагууд»: client logos as an endless, CSS-only marquee; hidden when
+ * there are none. The track holds the set twice and slides by -50%, so the loop is seamless.
+ * It pauses on hover / keyboard focus, and with reduced motion it is a static wrapped row.
+ */
 export async function ClientLogos({ className = "py-12 sm:py-14" }: { className?: string }) {
   const logos = await getClientLogos();
   if (!logos.length) return null;
+  const repeat = Math.max(1, Math.ceil(MARQUEE_MIN_PER_HALF / logos.length));
+  const half = Array.from({ length: repeat }, (_, r) => logos.map((l) => ({ ...l, copy: r }))).flat();
+  const items = [...half, ...half.map((l) => ({ ...l, copy: l.copy + repeat }))];
   return (
     <section aria-labelledby="clients-heading" className={className}>
       <div className={CONTAINER}>
         <h2 className="text-center text-sm font-semibold tracking-wide text-fg-subtle uppercase" id="clients-heading">
           Бидэнд итгэдэг байгууллагууд
         </h2>
-        <ul className="mt-8 flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
-          {logos.map((l) => {
+      </div>
+      <div className="group/marquee mt-8 overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)] motion-reduce:[mask-image:none]">
+        <ul
+          className="flex w-max animate-[marquee_var(--marquee-duration)_linear_infinite] items-center group-hover/marquee:[animation-play-state:paused] group-focus-within/marquee:[animation-play-state:paused] motion-reduce:mx-auto motion-reduce:w-full motion-reduce:max-w-7xl motion-reduce:animate-none motion-reduce:flex-wrap motion-reduce:justify-center motion-reduce:gap-y-6 motion-reduce:px-4"
+          style={{ "--marquee-duration": `${half.length * MARQUEE_SECONDS_PER_LOGO}s` } as CSSProperties}
+        >
+          {items.map((l) => {
+            // Only the first copy is real content; the rest exist for the loop.
+            const dup = l.copy > 0;
             const img = (
               <Image
-                alt={l.name}
-                className="h-10 w-auto max-w-[9rem] object-contain transition-transform hover:scale-105 sm:h-12"
-                height={l.height ?? 48}
-                sizes="144px"
+                alt={dup ? "" : l.name}
+                className="h-full w-full object-contain"
+                height={l.height ?? 300}
+                sizes="160px"
                 src={l.logoUrl}
                 title={l.name}
-                width={l.width ?? 144}
+                width={l.width ?? 600}
               />
             );
             return (
-              <li key={l.id}>
-                {l.url ? (
-                  <a href={l.url} rel="noopener" target="_blank">
-                    {img}
-                  </a>
-                ) : (
-                  img
-                )}
+              <li aria-hidden={dup || undefined} className={`shrink-0 px-5 sm:px-7 ${dup ? "motion-reduce:hidden" : ""}`} key={`${l.id}-${l.copy}`}>
+                <span className="block h-14 w-28 transition-transform duration-300 hover:scale-105 sm:h-16 sm:w-32">
+                  {l.url ? (
+                    <a className="block h-full w-full" href={l.url} rel="noopener" tabIndex={dup ? -1 : undefined} target="_blank">
+                      {img}
+                    </a>
+                  ) : (
+                    img
+                  )}
+                </span>
               </li>
             );
           })}
