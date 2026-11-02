@@ -85,11 +85,12 @@ export function ClientGrid({ items }: { items: Item[] }) {
               </li>
             ) : (
               <li
-                className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-card transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-[0_12px_28px_-18px_rgb(16_24_40/0.4)]"
+                className="group grid aspect-[4/3] min-w-0 min-[420px]:aspect-[4/5] grid-rows-[3fr_1fr_1fr] overflow-hidden rounded-2xl border border-line bg-card transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-[0_12px_28px_-18px_rgb(16_24_40/0.4)]"
                 key={c.id}
               >
+                {/* Fixed 3 : 1 : 1 rows (logo : label : actions) keep every card's sections aligned. */}
                 {/* Logos are drawn for light backgrounds, so the plate stays light in dark mode too. */}
-                <div className="relative grid aspect-[16/9] place-items-center border-b border-line bg-white p-6 dark:bg-[#eef3f8]">
+                <div className="relative grid min-h-0 place-items-center border-b border-line bg-white p-6 dark:bg-[#eef3f8]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     alt={c.name}
@@ -103,7 +104,7 @@ export function ClientGrid({ items }: { items: Item[] }) {
                   )}
                 </div>
 
-                <div className="min-w-0 flex-1 px-4 pb-3 pt-3">
+                <div className="flex min-h-0 min-w-0 flex-col justify-center px-4">
                   <p className="truncate text-sm font-semibold text-fg" title={c.name}>
                     {c.name}
                   </p>
@@ -114,7 +115,7 @@ export function ClientGrid({ items }: { items: Item[] }) {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 divide-x divide-line border-t border-line text-sm font-medium">
+                <div className="grid min-h-0 grid-cols-2 divide-x divide-line border-t border-line text-sm font-medium">
                   <button
                     className="py-2.5 text-fg-muted transition-colors hover:bg-surface hover:text-fg"
                     onClick={() => {
