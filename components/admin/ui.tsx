@@ -66,5 +66,23 @@ export function FilterTabs({ base, current, tabs }: { base: string; current: str
   );
 }
 
-export const fmtDateTime = (d: Date | null) =>
-  d ? new Intl.DateTimeFormat("mn-MN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ulaanbaatar" }).format(d) : "—";
+const UB_PARTS = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "Asia/Ulaanbaatar",
+});
+
+/**
+ * «2026.09.09 04:59» in Ulaanbaatar time. Built from numeric parts rather than the mn-MN
+ * locale: browsers without Mongolian locale data fall back to «9/9/26, 4:59 AM», which
+ * breaks hydration for client components (contact-list) rendered on the server.
+ */
+export const fmtDateTime = (d: Date | string | null) => {
+  if (!d) return "—";
+  const p = Object.fromEntries(UB_PARTS.formatToParts(new Date(d)).map((x) => [x.type, x.value]));
+  return `${p.year}.${p.month}.${p.day} ${p.hour}:${p.minute}`;
+};

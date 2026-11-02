@@ -2,6 +2,7 @@ import "server-only";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { cache } from "react";
 import { db, toNum } from "@/lib/db";
 import type { User, UserRole } from "@/lib/generated/prisma/client";
@@ -74,6 +75,8 @@ async function readCookie(name: string) {
 async function userIdFromCookie(realm: Realm) {
   const token = await readCookie(SESSION_COOKIES[realm]);
   if (!token) return null;
+  // jwtVerify reads the clock (exp/iat checks); a session is per request, never prerendered.
+  await connection();
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
     if (payload.scope !== `session:${realm}` || !payload.sub) return null;
