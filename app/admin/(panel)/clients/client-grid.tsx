@@ -90,7 +90,7 @@ export function ClientGrid({ items }: { items: Item[] }) {
               >
                 {/* Fixed 3 : 1 : 1 rows (logo : label : actions) keep every card's sections aligned. */}
                 {/* Logos are drawn for light backgrounds, so the plate stays light in dark mode too. */}
-                <div className="relative grid min-h-0 place-items-center border-b border-line bg-white p-6 dark:bg-[#eef3f8]">
+                <div className="relative grid min-h-0 place-items-center bg-white p-6 dark:bg-[#eef3f8]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     alt={c.name}
