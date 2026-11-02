@@ -65,9 +65,9 @@ export function EditableItem({ summary, actions, children }: { summary: ReactNod
       </li>
     );
   return (
-    <li className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface/50">
+    <li className="group flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-surface/50 sm:flex-row sm:items-center sm:gap-3">
       <div className="min-w-0 flex-1">{summary}</div>
-      <div className="flex shrink-0 items-center gap-1 opacity-80 transition-opacity group-hover:opacity-100">
+      <div className="flex shrink-0 items-center justify-end gap-1 opacity-80 transition-opacity group-hover:opacity-100">
         {actions}
         <button className={buttonClass("ghost", "sm")} onClick={() => setEditing(true)} type="button">
           Засах
