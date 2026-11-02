@@ -8,7 +8,7 @@ import { buttonClass } from "@/components/ui/form";
  * the «add» form only on its button. Forms inside call useCloseOnSave(state) so they close
  * again after a successful save.
  */
-const CloseContext = createContext<(() => void) | null>(null);
+export const CloseContext = createContext<(() => void) | null>(null);
 
 /** Closes the surrounding NewItem / EditableItem once the form's action reports success. */
 export function useCloseOnSave(state: { ok: boolean } | null | undefined) {
