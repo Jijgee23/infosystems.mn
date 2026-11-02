@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { ConfirmButton } from "@/components/admin/confirm-button";
+import { useState, useTransition } from "react";
 import { CloseContext } from "@/components/admin/list-editor";
 import { Badge, buttonClass } from "@/components/ui/form";
 import { deleteClientLogo } from "@/lib/actions/trust";
@@ -11,6 +10,25 @@ type Item = { id: string; name: string; url: string; isPublic: boolean; sortOrde
 
 /** Edit/add panels span the whole row so the form never sits in one narrow column. */
 const FULL_ROW = "col-span-full";
+
+function DeleteButton({ id, name }: { id: string; name: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <button
+      className="py-2.5 text-red-600 transition-colors hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
+      disabled={pending}
+      onClick={() => {
+        if (!window.confirm(`«${name}»-г устгах уу?`)) return;
+        start(async () => {
+          await deleteClientLogo(id);
+        });
+      }}
+      type="button"
+    >
+      {pending ? "Устгаж байна…" : "Устгах"}
+    </button>
+  );
+}
 
 export function ClientGrid({ items }: { items: Item[] }) {
   const [adding, setAdding] = useState(false);
@@ -67,37 +85,38 @@ export function ClientGrid({ items }: { items: Item[] }) {
               </li>
             ) : (
               <li
-                className="flex min-w-0 flex-col gap-3 rounded-2xl border border-line bg-card p-3.5 transition-[border-color,box-shadow] hover:border-brand/40 hover:shadow-[0_8px_24px_-16px_rgb(16_24_40/0.35)]"
+                className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-card transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-[0_12px_28px_-18px_rgb(16_24_40/0.4)]"
                 key={c.id}
               >
                 {/* Logos are drawn for light backgrounds, so the plate stays light in dark mode too. */}
-                <div className="grid h-20 place-items-center rounded-xl border border-line bg-white px-4 py-3 dark:bg-[#eef3f8]">
+                <div className="relative grid aspect-[16/9] place-items-center border-b border-line bg-white p-6 dark:bg-[#eef3f8]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img alt={c.name} className={`max-h-full max-w-full object-contain ${c.isPublic ? "" : "opacity-40 grayscale"}`} src={c.logoUrl} />
-                </div>
-
-                <div className="min-w-0 flex-1 px-0.5">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <p className="min-w-0 truncate text-sm font-semibold text-fg" title={c.name}>
-                      {c.name}
-                    </p>
-                    {!c.isPublic && <Badge>Нуусан</Badge>}
-                  </div>
-                  {c.url ? (
-                    <a className="mt-0.5 block truncate text-xs text-fg-subtle hover:text-brand" href={c.url} rel="noreferrer" target="_blank">
-                      {c.url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
-                    </a>
-                  ) : (
-                    <p className="mt-0.5 text-xs text-fg-subtle">Вэбсайтгүй</p>
+                  <img
+                    alt={c.name}
+                    className={`max-h-full max-w-full object-contain transition-[filter,opacity] ${c.isPublic ? "" : "opacity-40 grayscale group-hover:opacity-70"}`}
+                    src={c.logoUrl}
+                  />
+                  {!c.isPublic && (
+                    <span className="absolute left-2.5 top-2.5">
+                      <Badge>Нуусан</Badge>
+                    </span>
                   )}
                 </div>
 
-                <div className="-mx-1 -mb-1 flex flex-wrap items-center justify-end gap-1">
-                  <ConfirmButton action={deleteClientLogo.bind(null, c.id)} confirm={`«${c.name}»-г устгах уу?`} size="sm" variant="ghost">
-                    Устгах
-                  </ConfirmButton>
+                <div className="min-w-0 flex-1 px-4 pb-3 pt-3">
+                  <p className="truncate text-sm font-semibold text-fg" title={c.name}>
+                    {c.name}
+                  </p>
+                  {c.url && (
+                    <a className="mt-0.5 block truncate text-xs text-fg-subtle hover:text-brand hover:underline" href={c.url} rel="noreferrer" target="_blank">
+                      {c.url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                    </a>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 divide-x divide-line border-t border-line text-sm font-medium">
                   <button
-                    className={buttonClass("secondary", "sm")}
+                    className="py-2.5 text-fg-muted transition-colors hover:bg-surface hover:text-fg"
                     onClick={() => {
                       setAdding(false);
                       setEditingId(c.id);
@@ -106,6 +125,7 @@ export function ClientGrid({ items }: { items: Item[] }) {
                   >
                     Засах
                   </button>
+                  <DeleteButton id={c.id} name={c.name} />
                 </div>
               </li>
             ),
