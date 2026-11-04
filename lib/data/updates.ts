@@ -23,14 +23,17 @@ export async function getUpdates(names: string[], limit?: number) {
   });
 }
 
-/** Products that have release notes, for the /updates filter. */
+/**
+ * Top-level products that have release notes and a public page, for the /updates filter.
+ * Unlisted ones are included (their page links here) but get no tab of their own.
+ */
 export async function getUpdateProducts() {
   "use cache";
   cacheLife("hours");
   cacheTag(UPDATES_TAG, PRODUCTS_TAG);
   return db.product.findMany({
-    where: { versionNames: { isEmpty: false }, listed: true, publishedAt: { not: null } },
+    where: { versionNames: { isEmpty: false }, parentId: null, publishedAt: { not: null, lte: new Date() } },
     orderBy: [{ sortOrder: "asc" }],
-    select: { slug: true, name: true, versionNames: true },
+    select: { slug: true, name: true, versionNames: true, listed: true },
   });
 }

@@ -1,3 +1,6 @@
+/** Public origin of the site, without a trailing slash (SITE_URL=https://infosystems.mn/ would otherwise give `//` paths). */
+export const SITE_URL = (process.env.SITE_URL ?? "https://infosystems.mn").replace(/\/+$/, "");
+
 export const MAIN_NAV = [
   { href: "/solutions", label: "Шийдэл" },
   { href: "/pricing", label: "Үнэ" },

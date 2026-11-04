@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { Prisma, UserRole } from "@/lib/generated/prisma/client";
 import { escapeHtml, sendMail } from "@/lib/mail";
 import { sanitizeHtml } from "@/lib/sanitize";
-import { SOLUTIONS } from "@/lib/site";
+import { SITE_URL, SOLUTIONS } from "@/lib/site";
 import { POST_CATEGORIES, type PostCategory } from "@/lib/post-categories";
 import { slugify } from "@/lib/slug";
 import { videoEmbedUrl } from "@/lib/video";
@@ -22,7 +22,6 @@ import { fromDateInput, fromLocalInput } from "@/lib/time";
 import { IMAGE_TYPES, releaseUploads, saveUpload, UploadError } from "@/lib/uploads";
 import type { FormState } from "./contact";
 
-const SITE_URL = process.env.SITE_URL ?? "https://infosystems.mn";
 const errorsOf = (e: z.ZodError) => Object.fromEntries(e.issues.map((i) => [String(i.path[0]), i.message]));
 const optional = (v: FormDataEntryValue | null) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const isUniqueViolation = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
@@ -196,11 +195,16 @@ const CONTACTS_PAGE = 20;
 /** One page of contact requests, newest first; pass the last row's id as `cursor` for the next page. */
 export async function loadContacts(filter: string, cursor?: string) {
   await requireStaff();
+  // Keyset paging: «older than the last row shown». A Prisma cursor + skip:1 would skip a real row
+  // when the last row no longer matches the filter (e.g. it was just marked seen under «new»).
+  const last = cursor ? await db.contactRequest.findUnique({ where: { id: cursor }, select: { id: true, createdAt: true } }) : null;
   const rows = await db.contactRequest.findMany({
-    where: filter === "new" ? { seen: false } : undefined,
+    where: {
+      ...(filter === "new" ? { seen: false } : {}),
+      ...(last ? { OR: [{ createdAt: { lt: last.createdAt } }, { createdAt: last.createdAt, id: { lt: last.id } }] } : {}),
+    },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: CONTACTS_PAGE + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
   const hasMore = rows.length > CONTACTS_PAGE;
   return { rows: hasMore ? rows.slice(0, CONTACTS_PAGE) : rows, hasMore };

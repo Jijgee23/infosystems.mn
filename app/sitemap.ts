@@ -8,8 +8,9 @@ import { getPublishedPosts } from "@/lib/data/posts";
 import { PRODUCTS_TAG } from "@/lib/data/products";
 import { lifeUntil, nextPublishAt } from "@/lib/data/schedule";
 import { TRUST_TAG } from "@/lib/data/trust";
+import { LEGACY_PRODUCT_PAGES } from "@/lib/product-pages";
 
-const SITE = process.env.SITE_URL ?? "https://infosystems.mn";
+import { SITE_URL as SITE } from "@/lib/site";
 
 /**
  * Every static page under app/(site), skipping dynamic segments and the portal.
@@ -37,8 +38,9 @@ async function dynamicPages(): Promise<MetadataRoute.Sitemap> {
   const published = { publishedAt: { not: null, lte: new Date() } };
   const [products, cases, guides] = await Promise.all([
     // Unlisted products keep their page, so they stay in the sitemap too.
+    // Slugs redirected elsewhere (next.config.ts) are left out: a sitemap must not list redirects.
     db.product.findMany({
-      where: { ...published, OR: [{ parentId: null }, { parent: published }] },
+      where: { ...published, OR: [{ parentId: null }, { parent: published }], NOT: { parentId: null, slug: { in: Object.keys(LEGACY_PRODUCT_PAGES) } } },
       select: { slug: true, updatedAt: true, parentId: true, parent: { select: { slug: true } } },
     }),
     db.caseStudy.findMany({ where: published, select: { slug: true, updatedAt: true } }),
@@ -56,7 +58,14 @@ async function dynamicPages(): Promise<MetadataRoute.Sitemap> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const pages = ["", ...staticRoutes()].map((p) => ({ url: `${SITE}${p}`, changeFrequency: "monthly" as const, priority: p === "" ? 1 : 0.7 }));
+  let routes: string[] = [];
+  try {
+    routes = staticRoutes();
+  } catch (e) {
+    // Only possible if the app source isn't deployed next to the build; keep the rest of the sitemap.
+    console.error("[sitemap] static routes unavailable", e);
+  }
+  const pages = ["", ...routes].map((p) => ({ url: `${SITE}${p}`, changeFrequency: "monthly" as const, priority: p === "" ? 1 : 0.7 }));
   const [dynamic, posts] = await Promise.all([
     dynamicPages().catch((e) => {
       console.error("[sitemap] products/case studies unavailable", e);

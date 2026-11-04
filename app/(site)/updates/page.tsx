@@ -33,8 +33,10 @@ export default function UpdatesPage(props: PageProps<"/updates">) {
 
 async function Updates({ searchParams }: Pick<PageProps<"/updates">, "searchParams">) {
   const sp = await searchParams;
-  const products = await getUpdateProducts();
-  const current = products.find((p) => p.slug === sp.product) ?? null;
+  const all = await getUpdateProducts();
+  const current = all.find((p) => p.slug === sp.product) ?? null;
+  // Tabs and «Бүгд» cover listed products; an unlisted product is shown only when asked for.
+  const products = all.filter((p) => p.listed || p === current);
   const updates = await getUpdates(current ? current.versionNames : products.flatMap((p) => p.versionNames), 200);
   const productOf = (name: string | null) => products.find((p) => name && p.versionNames.includes(name))?.name;
   const tab = (active: boolean) =>

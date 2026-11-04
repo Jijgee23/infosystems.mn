@@ -2,6 +2,7 @@ import "server-only";
 import nodemailer from "nodemailer";
 import { getCompany } from "@/lib/data/company";
 import { renderHtml, renderText, type MailModel } from "@/lib/mail-template";
+import { SITE_URL } from "@/lib/site";
 
 /*
  * Same setup as macs.mn: one SMTP account (no_reply@infosystems.mn on smtp.mail.mn:465),
@@ -38,7 +39,7 @@ function transport() {
 export const FROM = process.env.SMTP_FROM ?? process.env.FROM_EMAIL ?? "InfoSystems Mongolia <no_reply@infosystems.mn>";
 /** The team inbox that receives every request from the site. */
 export const NOTIFY_TO = process.env.NOTIFY_TO ?? process.env.NOTIFY_EMAIL ?? "contact@infosystems.mn";
-export const SITE_URL = (process.env.SITE_URL ?? "https://infosystems.mn").replace(/\/$/, "");
+export { SITE_URL };
 
 /** The parts of the layout every message shares: company name, contacts, site link. */
 async function frame() {

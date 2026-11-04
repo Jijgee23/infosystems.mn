@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Manrope } from "next/font/google";
 import { Feedback } from "@/components/ui/feedback";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin", "cyrillic"] });
 const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.SITE_URL ?? "https://infosystems.mn"),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Санхүү, бүртгэлийн програм хангамж — 1998 оноос | InfoSystems Mongolia",
     template: "%s",

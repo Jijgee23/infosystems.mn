@@ -41,7 +41,6 @@ const COLUMNS = [
       ["/support/guides", "Заавар, гарын авлага"],
       ["/support/downloads", "Програм татах"],
       ["/updates", "Шинэчлэлтүүд"],
-      ["/support#training", "Сургалт"],
       ["/privacy", "Нууцлалын бодлого"],
     ],
   },
@@ -49,8 +48,9 @@ const COLUMNS = [
 
 async function CurrentYear() {
   "use cache";
-  cacheLife("days");
-  return <>{new Date().getFullYear()}</>;
+  cacheLife("hours");
+  // Ulaanbaatar time: the server runs in UTC, which would turn the year 8 hours late.
+  return <>{new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Asia/Ulaanbaatar" }).format(new Date())}</>;
 }
 
 export async function Footer() {

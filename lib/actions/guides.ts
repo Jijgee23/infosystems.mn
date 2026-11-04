@@ -4,6 +4,7 @@ import { refresh, revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStaff } from "@/lib/auth/session";
+import { DOWNLOADS_TAG } from "@/lib/data/downloads";
 import { GUIDES_TAG } from "@/lib/data/guides";
 import { db } from "@/lib/db";
 import { GUIDE_CATEGORIES, type GuideCategory } from "@/lib/guide-categories";
@@ -29,6 +30,15 @@ function guidesChanged() {
   revalidatePath("/admin/guides");
 }
 
+/** Downloads link to their guide by slug: follow a rename (or drop the link when the guide is gone). */
+async function relinkDownloads(oldSlug: string, newSlug: string | null) {
+  const { count } = await db.download.updateMany({ where: { guideSlug: oldSlug }, data: { guideSlug: newSlug } });
+  if (count) {
+    updateTag(DOWNLOADS_TAG);
+    revalidatePath("/admin/downloads");
+  }
+}
+
 export async function saveGuide(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireStaff();
   const id = idParam(formData.get("id"));
@@ -50,7 +60,9 @@ export async function saveGuide(_prev: FormState, formData: FormData): Promise<F
     contentDate: d.contentDate ? fromDateInput(d.contentDate) : null,
     publishedAt: publish ? (d.publishedAt ? fromLocalInput(d.publishedAt) : new Date()) : null,
   };
+  const prev = id ? await db.guide.findUnique({ where: { id }, select: { slug: true } }) : null;
   const saved = id ? await db.guide.update({ where: { id }, data, select: { id: true } }) : await db.guide.create({ data, select: { id: true } });
+  if (prev && prev.slug !== slug) await relinkDownloads(prev.slug, slug);
   guidesChanged();
   if (!id) redirect(`/admin/guides/${saved.id}?saved=1`);
   refresh();
@@ -59,7 +71,8 @@ export async function saveGuide(_prev: FormState, formData: FormData): Promise<F
 
 export async function deleteGuide(id: string) {
   await requireStaff();
-  await db.guide.delete({ where: { id } });
+  const { slug } = await db.guide.delete({ where: { id }, select: { slug: true } });
+  await relinkDownloads(slug, null);
   guidesChanged();
   redirect("/admin/guides");
 }

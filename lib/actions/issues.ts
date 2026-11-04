@@ -7,14 +7,13 @@ import { after } from "next/server";
 import { z } from "zod";
 import { getSessionUser, isStaff, LOGIN_PATH, type Realm } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { NOTIFY_TO, sendMail } from "@/lib/mail";
+import { NOTIFY_TO, SITE_URL, sendMail } from "@/lib/mail";
 import { textToHtml } from "@/lib/sanitize";
 import fs from "node:fs/promises";
 import { filesFrom, filePath, IMAGE_TYPES, DOC_TYPES, releaseUploads, saveUploads, UploadError } from "@/lib/uploads";
 import { isKeyRateLimited } from "@/lib/rate-limit";
 import type { FormState } from "./contact";
 
-const SITE_URL = process.env.SITE_URL ?? "https://infosystems.mn";
 const TOO_MANY = "Хэт олон удаа илгээлээ. Түр хүлээгээд дахин оролдоно уу.";
 
 const IssueSchema = z.object({

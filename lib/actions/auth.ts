@@ -7,12 +7,11 @@ import { after } from "next/server";
 import { z } from "zod";
 import { createSession, destroySession, isStaffRole } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { NOTIFY_TO, sendMail } from "@/lib/mail";
+import { NOTIFY_TO, SITE_URL, sendMail } from "@/lib/mail";
 import { attemptLimiter, isRateLimited } from "@/lib/rate-limit";
 import { COMPANY_REGISTER, normalizePersonalRegister, PERSONAL_REGISTER } from "@/lib/register-number";
 import type { FormState } from "./contact";
 
-const SITE_URL = process.env.SITE_URL ?? "https://infosystems.mn";
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /**

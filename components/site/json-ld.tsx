@@ -1,4 +1,6 @@
-export const SITE_URL = process.env.SITE_URL ?? "https://infosystems.mn";
+import { SITE_URL } from "@/lib/site";
+
+export { SITE_URL };
 
 /** Absolute URL on this site for structured data. */
 export const absUrl = (path: string) => (path.startsWith("http") ? path : `${SITE_URL}${path.startsWith("/") ? "" : "/"}${path}`);
