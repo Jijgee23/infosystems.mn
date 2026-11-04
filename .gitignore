@@ -47,3 +47,6 @@ next-env.d.ts
 
 # prisma client
 /lib/generated
+
+# Claude Code worktrees (local only)
+/.claude/worktrees/
