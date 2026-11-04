@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { iso } from "@/lib/legacy";
-import { toDateInput } from "@/lib/time";
+import { fromDateInput, toDateInput, toLocalInput } from "@/lib/time";
 
 // Codes used by the desktop apps (see InsertNotification in prisma/schema.prisma).
 const MACS_VERSION_ALL = 0;
@@ -20,8 +20,10 @@ export async function GET(req: NextRequest) {
   const macsversion = q.get("macsversion");
   const apptype = q.get("apptype") ?? "0";
 
+  // expire_date is a DATE (midnight UTC): a notice is shown through its expiry day, Ulaanbaatar time.
+  const today = fromDateInput(toLocalInput(new Date()).slice(0, 10));
   const rows = await db.insertNotification.findMany({
-    where: { expireDate: { gt: new Date() }, isActive: 1 },
+    where: { expireDate: { gte: today }, isActive: 1 },
     orderBy: { seq: "asc" },
   });
 

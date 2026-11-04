@@ -34,7 +34,8 @@ const PostSchema = z.object({
   category: z.enum(POST_CATEGORIES.map((c) => c.name) as [PostCategory, ...PostCategory[]]).default("Мэдээ мэдээлэл"),
   excerpt: z.string().trim().max(500).optional(),
   body: z.string().max(500_000),
-  publishedAt: z.string().optional(),
+  // datetime-local value («YYYY-MM-DDTHH:mm», seconds optional); anything else would become an Invalid Date.
+  publishedAt: z.string().regex(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?)?$/, "Огноо буруу байна").optional(),
 });
 
 export async function savePost(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -76,6 +77,8 @@ export async function savePost(_prev: FormState, formData: FormData): Promise<Fo
     saved = id ? await db.post.update({ where: { id }, data, select: { id: true } }) : await db.post.create({ data, select: { id: true } });
   } catch (e) {
     await releaseUploads([imageId]);
+    // Two saves racing for the same slug: the check above passed for both.
+    if (isUniqueViolation(e)) return { ok: false, message: "Ийм slug-тай мэдээ байна.", errors: { slug: "Давхардсан байна" } };
     throw e;
   }
   if (prev?.imageId !== imageId) await releaseUploads([prev?.imageId]);
@@ -131,8 +134,12 @@ export async function updateUser(_prev: FormState, formData: FormData): Promise<
   // Only admins may grant or change staff roles, and nobody can demote themselves.
   if (role !== user.role && (me.role !== "admin" || user.id === me.id)) return { ok: false, message: "Эрх өөрчлөх боломжгүй." };
 
-  const confirmed = formData.get("adminConfirmed") === "on";
+  // Nobody can unconfirm (and so lock out) themselves, like blocking below.
+  const confirmed = user.id === me.id ? true : formData.get("adminConfirmed") === "on";
+  const blocked = user.id === me.id ? false : formData.get("blocked") === "on";
   const productIds = idList(formData.getAll("products"));
+  // A reset link already mailed must not outlive an email change or a block.
+  const dropResetToken = email !== user.email || (blocked && !user.blocked);
 
   try {
     await db.$transaction([
@@ -146,13 +153,15 @@ export async function updateUser(_prev: FormState, formData: FormData): Promise<
           customerType: formData.get("customerType") === "individual" ? "individual" : "company",
           personalRegister,
           adminConfirmed: confirmed,
-          blocked: user.id === me.id ? false : formData.get("blocked") === "on",
+          blocked,
           role,
           seen: true,
+          ...(dropResetToken ? { resetToken: null, resetTokenExpires: null } : {}),
         },
       }),
-      db.userProduct.deleteMany({ where: { userId: id } }),
-      db.userProduct.createMany({ data: productIds.map((productId) => ({ userId: id, productId })) }),
+      // The form lists top-level products only, so only those links are replaced; module links stay.
+      db.userProduct.deleteMany({ where: { userId: id, product: { parentId: null } } }),
+      db.userProduct.createMany({ data: productIds.map((productId) => ({ userId: id, productId })), skipDuplicates: true }),
     ]);
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, message: "И-мэйл эсвэл регистрийн дугаар өөр хэрэглэгчид бүртгэлтэй байна." };
@@ -161,7 +170,7 @@ export async function updateUser(_prev: FormState, formData: FormData): Promise<
 
   if (confirmed && !user.adminConfirmed) {
     // Same message the old /emails endpoint sent on approval.
-    await sendMail({
+    const sent = await sendMail({
       to: email,
       subject: "Таны бүртгэл баталгаажлаа · InfoSystems",
       content: {
@@ -171,6 +180,10 @@ export async function updateUser(_prev: FormState, formData: FormData): Promise<
         button: { label: "Нэвтрэх", url: `${SITE_URL}/portal/login` },
       },
     });
+    if (!sent) {
+      refresh();
+      return { ok: true, message: "Хадгалагдлаа. Гэхдээ баталгаажсан тухай мэйл илгээгдсэнгүй: харилцагчид өөрөө мэдэгдэнэ үү." };
+    }
   }
   refresh();
   return { ok: true, message: "Хадгалагдлаа." };
@@ -298,7 +311,8 @@ export async function saveProduct(_prev: FormState, formData: FormData): Promise
     title: d.title || d.name,
     slug,
     tagline: d.tagline || null,
-    icon: d.icon || null,
+    // The module form has no icon picker: keep the stored icon unless the field was sent.
+    ...(formData.has("icon") ? { icon: d.icon || null } : {}),
     badge: d.badge || null,
     videoUrl: d.videoUrl || null,
     // "MACS, MACSPOS" → {MACS,MACSPOS}: version_infos.productname values.
@@ -331,6 +345,8 @@ export async function saveProduct(_prev: FormState, formData: FormData): Promise
     });
   } catch (e) {
     await releaseUploads(Object.values(pictures));
+    // Two saves racing for the same slug (or a second «main» product): the checks above passed for both.
+    if (isUniqueViolation(e)) return { ok: false, message: "Давхардсан утга байна (slug эсвэл үндсэн бүтээгдэхүүн). Дахин хадгална уу.", errors: { slug: "Давхардсан байж магадгүй" } };
     throw e;
   }
   // Pictures this save replaced or removed.
@@ -393,7 +409,7 @@ export async function saveProductBlock(_prev: FormState, formData: FormData): Pr
   if (b.kind !== "text" && !items.length) return { ok: false, message: "Дор хаяж нэг мөр нэмнэ үү." };
   const badHref = items.find((it) => it.href && !/^(\/(?!\/)|https?:\/\/)/.test(it.href));
   if (badHref) return { ok: false, message: `«${badHref.title}»: холбоос / эсвэл https:// -ээр эхэлнэ.` };
-  if (b.kind === "text" && !b.body?.replace(/<[^>]+>/g, "").trim()) return { ok: false, message: "Текст оруулна уу.", errors: { body: "Хоосон байна" } };
+  if (b.kind === "text" && !b.body?.replace(/<[^>]+>/g, "").trim() && !/<img\b/i.test(b.body ?? "")) return { ok: false, message: "Текст оруулна уу.", errors: { body: "Хоосон байна" } };
 
   const data = {
     kind: b.kind,
@@ -509,14 +525,14 @@ export async function saveNotification(_prev: FormState, formData: FormData): Pr
     fileUrl: d.fileUrl || null,
     customerId: d.customerId?.replace(/\s+/g, "") || null,
     isActive: formData.get("isActive") === "on" ? 1 : 0,
-    publishedAt: new Date(),
   };
   if (id) {
     const prev = await db.insertNotification.findUnique({ where: { id }, select: { fileUrl: true } });
+    // Edits keep the original publish date (the desktop apps read it as published_at).
     await db.insertNotification.update({ where: { id }, data });
     if (prev?.fileUrl && prev.fileUrl !== data.fileUrl) await releaseNotificationPdf(prev.fileUrl);
   } else {
-    await db.insertNotification.create({ data });
+    await db.insertNotification.create({ data: { ...data, publishedAt: new Date() } });
     redirect("/admin/notifications");
   }
   refresh();

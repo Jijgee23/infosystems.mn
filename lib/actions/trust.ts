@@ -279,7 +279,9 @@ export async function saveComparisonRow(_prev: FormState, formData: FormData): P
   const id = idParam(formData.get("id"));
   const label = String(formData.get("label") ?? "").trim().slice(0, 160);
   if (label.length < 2) return { ok: false, message: "Мөрийн нэр оруулна уу.", errors: { label: "Хоосон" } };
-  const sortOrder = order.parse(formData.get("sortOrder") ?? 0);
+  const parsedOrder = order.safeParse(formData.get("sortOrder") || 0);
+  if (!parsedOrder.success) return { ok: false, message: "Дараалал 0-999 хооронд тоо байна.", errors: { sortOrder: "Буруу" } };
+  const sortOrder = parsedOrder.data;
   const cells = [...formData.entries()]
     .filter(([k]) => k.startsWith("cell_"))
     .map(([k, v]) => ({ productId: idParam(k.slice(5)), value: String(v).trim().slice(0, 255) }))

@@ -196,20 +196,27 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
 
   // Counted only for valid submissions, so fixing typos never locks anyone out.
   if (await isRateLimited("register", 5, 60 * 60_000)) return { ok: false, values, message: "Түр хүлээгээд дахин оролдоно уу." };
+  const exists = { ok: false, code: "exists", values, message: "Энэ и-мэйл эсвэл регистрийн дугаараар бүртгэл үүссэн байна. Нэвтрэх эсвэл нууц үгээ сэргээнэ үү." };
   const existing = await db.user.findFirst({ where: { OR: [{ email }, registerWhere] }, select: { id: true } });
-  if (existing) return { ok: false, code: "exists", values, message: "Энэ и-мэйл эсвэл регистрийн дугаараар бүртгэл үүссэн байна. Нэвтрэх эсвэл нууц үгээ сэргээнэ үү." };
+  if (existing) return exists;
 
-  await db.user.create({
-    data: {
-      username: d.username,
-      email,
-      customerType: d.customerType,
-      companyName: d.customerType === "company" ? d.companyName : null,
-      ...registerWhere,
-      passwordHash: await bcrypt.hash(d.password, 10),
-      passwordChangedAt: new Date(),
-    },
-  });
+  try {
+    await db.user.create({
+      data: {
+        username: d.username,
+        email,
+        customerType: d.customerType,
+        companyName: d.customerType === "company" ? d.companyName : null,
+        ...registerWhere,
+        passwordHash: await bcrypt.hash(d.password, 10),
+        passwordChangedAt: new Date(),
+      },
+    });
+  } catch (e) {
+    // Two sign-ups racing with the same email or register: the check above passed for both.
+    if ((e as { code?: string })?.code === "P2002") return exists;
+    throw e;
+  }
   const isCompany = d.customerType === "company";
   // After the response, so a slow SMTP server doesn't hold up the form.
   after(() => sendMail({

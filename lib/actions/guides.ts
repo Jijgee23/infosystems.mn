@@ -21,7 +21,8 @@ const GuideSchema = z.object({
   sortOrder: z.coerce.number().int().min(0).max(999).default(0),
   body: z.string().max(500_000),
   contentDate: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).optional(),
-  publishedAt: z.string().optional(),
+  // datetime-local value («YYYY-MM-DDTHH:mm», seconds optional); anything else would become an Invalid Date.
+  publishedAt: z.string().regex(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?)?$/, "Огноо буруу байна").optional(),
 });
 
 /** Public guide pages, the guide lists and the admin list. */

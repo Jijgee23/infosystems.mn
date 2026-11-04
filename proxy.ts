@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // Keep in sync with SESSION_COOKIES in lib/auth/session.ts (proxy can't import server-only code).
 const CUSTOMER_COOKIE = "is_session";
 const STAFF_COOKIE = "is_admin_session";
+// Keep in sync with requireUser in lib/auth/session.ts.
+const PORTAL_PATH_HEADER = "x-portal-path";
 const PUBLIC_PORTAL = ["/portal/login", "/portal/register", "/portal/forgot-password", "/portal/reset-password"];
 
 /**
@@ -16,7 +18,14 @@ export function proxy(req: NextRequest) {
     if (pathname === "/admin/login" || req.cookies.has(STAFF_COOKIE)) return NextResponse.next();
     return redirect(req, `/admin/login?next=${encodeURIComponent(pathname + search)}`);
   }
-  if (PUBLIC_PORTAL.some((p) => pathname.startsWith(p)) || req.cookies.has(CUSTOMER_COOKIE)) return NextResponse.next();
+  if (PUBLIC_PORTAL.some((p) => pathname.startsWith(p))) return NextResponse.next();
+  if (req.cookies.has(CUSTOMER_COOKIE)) {
+    // The cookie may still be expired or revoked: tell requireUser where we are, so its login
+    // redirect can come back to this page rather than /portal. (safeNext validates it on sign-in.)
+    const headers = new Headers(req.headers);
+    headers.set(PORTAL_PATH_HEADER, pathname + search);
+    return NextResponse.next({ request: { headers } });
+  }
   return redirect(req, `/portal/login?next=${encodeURIComponent(pathname + search)}`);
 }
 

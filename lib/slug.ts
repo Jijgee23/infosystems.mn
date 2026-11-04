@@ -14,6 +14,6 @@ export function slugify(input: string) {
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 90);
+    .slice(0, 90)
+    .replace(/^-+|-+$/g, ""); // after the cut, so a slug never ends in «-»
 }
