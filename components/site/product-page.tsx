@@ -11,7 +11,7 @@ import { formatPhone, getCompany, telHref } from "@/lib/data/company";
 import { getComparison, getProductNav, type ProductPageData } from "@/lib/data/products";
 import { getUpdates } from "@/lib/data/updates";
 import { ProductMark } from "@/lib/product-icons";
-import { linkText } from "@/lib/product-links";
+import { linkBadge, linkText } from "@/lib/product-links";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { videoEmbedUrl } from "@/lib/video";
 import { absUrl, JsonLd, SITE_URL } from "./json-ld";
@@ -151,9 +151,27 @@ export async function ProductView({ product: p }: { product: ProductPageData }) 
 
 const LINK_ICON = { website: Globe, app_store: Smartphone, google_play: Smartphone, windows: Download, other: ExternalLink } as const;
 
-/** The product's own website, app-store and download links (admin › Холбоосууд), opened in a new tab. */
+/**
+ * The product's own website, app-store and download links (admin › Холбоосууд), opened in a new tab.
+ * App Store / Google Play links show the store's official badge, as tall as the buttons beside it.
+ */
 function ProductLinkButtons({ links }: { links: ProductPageData["links"] }) {
   return links.map((l) => {
+    const badge = linkBadge(l.kind);
+    if (badge)
+      return (
+        <a className="inline-flex h-12 shrink-0 self-start rounded-[10px] transition-opacity hover:opacity-85 sm:self-auto" href={l.url} key={l.id} rel="noopener noreferrer" target="_blank">
+          <Image
+            alt={`${badge.alt} (шинэ таб дээр нээгдэнэ)`}
+            className="h-12 w-auto"
+            height={48}
+            // SVG badge is used as-is; the PNG is small enough not to need resizing.
+            src={badge.src}
+            unoptimized
+            width={Math.round((48 * badge.width) / badge.height)}
+          />
+        </a>
+      );
     const Icon = LINK_ICON[l.kind];
     return (
       <a className={cn(SECONDARY, "h-12 px-6 text-base")} href={l.url} key={l.id} rel="noopener noreferrer" target="_blank">
