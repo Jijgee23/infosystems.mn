@@ -212,7 +212,8 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
     },
   });
   const isCompany = d.customerType === "company";
-  await sendMail({
+  // After the response, so a slow SMTP server doesn't hold up the form.
+  after(() => sendMail({
     to: NOTIFY_TO,
     replyTo: email,
     subject: `Шинэ бүртгэл — ${isCompany ? d.companyName : d.username} · InfoSystems`,
@@ -231,7 +232,7 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
       button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/users` },
       footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
     },
-  });
+  }));
   return { ok: true, message: "Бүртгэл хүлээн авлаа. Манай ажилтан баталгаажуулсны дараа и-мэйлээр мэдэгдэнэ." };
 }
 

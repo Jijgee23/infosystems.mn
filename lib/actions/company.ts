@@ -8,7 +8,7 @@ import { COMPANY_TAG } from "@/lib/data/company";
 import { db } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { sanitizeHtml } from "@/lib/sanitize";
-import { IMAGE_TYPES, saveUpload, UploadError } from "@/lib/uploads";
+import { IMAGE_TYPES, releaseUploads, saveUpload, UploadError } from "@/lib/uploads";
 import type { FormState } from "./contact";
 
 const errorsOf = (e: z.ZodError) => Object.fromEntries(e.issues.map((i) => [String(i.path[0]), i.message]));
@@ -231,15 +231,24 @@ export async function saveEmployee(_prev: FormState, formData: FormData): Promis
   } else if (formData.get("removePhoto") === "on") photoId = null;
 
   const data = { ...parsed.data, isPublic: formData.get("isPublic") === "on", ...(photoId !== undefined ? { photoId } : {}) };
-  if (id) await db.employee.update({ where: { id }, data });
-  else await db.employee.create({ data });
+  const prev = id && photoId !== undefined ? await db.employee.findUnique({ where: { id }, select: { photoId: true } }) : null;
+  try {
+    if (id) await db.employee.update({ where: { id }, data });
+    else await db.employee.create({ data });
+  } catch (e) {
+    await releaseUploads([photoId]);
+    throw e;
+  }
+  // A replaced or removed photo stops being served (a former employee's photo shouldn't stay online).
+  if (prev?.photoId !== photoId) await releaseUploads([prev?.photoId]);
   changed();
   return { ok: true, message: "Хадгалагдлаа." };
 }
 
 export async function deleteEmployee(id: string) {
   await requireStaff({ admin: true });
-  await db.employee.delete({ where: { id } });
+  const { photoId } = await db.employee.delete({ where: { id }, select: { photoId: true } });
+  await releaseUploads([photoId]);
   changed();
 }
 
@@ -284,15 +293,23 @@ export async function saveAward(_prev: FormState, formData: FormData): Promise<F
   if (!id && imageId === undefined) return { ok: false, message: "Шагналын зураг оруулна уу.", errors: { image: "Зураг заавал" } };
 
   const data = { ...parsed.data, isPublic: formData.get("isPublic") === "on", ...(imageId !== undefined ? { imageId } : {}) };
-  if (id) await db.award.update({ where: { id }, data });
-  else await db.award.create({ data: { ...data, imageId: imageId! } });
+  const prev = id && imageId !== undefined ? await db.award.findUnique({ where: { id }, select: { imageId: true } }) : null;
+  try {
+    if (id) await db.award.update({ where: { id }, data });
+    else await db.award.create({ data: { ...data, imageId: imageId! } });
+  } catch (e) {
+    await releaseUploads([imageId]);
+    throw e;
+  }
+  if (prev && prev.imageId !== imageId) await releaseUploads([prev.imageId]);
   changed();
   return { ok: true, message: "Хадгалагдлаа." };
 }
 
 export async function deleteAward(id: string) {
   await requireStaff({ admin: true });
-  await db.award.delete({ where: { id } });
+  const { imageId } = await db.award.delete({ where: { id }, select: { imageId: true } });
+  await releaseUploads([imageId]);
   changed();
 }
 

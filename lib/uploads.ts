@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { db } from "@/lib/db";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
 /** Files live outside /public so uploads made at runtime are served by app/uploads/[...path]. */
 export const UPLOAD_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.UPLOAD_DIR ?? "storage/uploads");
@@ -92,6 +93,59 @@ async function imageSize(data: Buffer) {
     return { width: rotated ? m.height : m.width, height: rotated ? m.width : m.height };
   } catch {
     throw new UploadError("Зургийн файлыг уншиж чадсангүй.");
+  }
+}
+
+/**
+ * Saves several files, all or nothing: if one is rejected, the ones already written are removed,
+ * so a failed form never leaves orphan rows and files behind.
+ */
+export async function saveUploads(files: File[], opts: Parameters<typeof saveUpload>[1] = {}) {
+  const saved: Awaited<ReturnType<typeof saveUpload>>[] = [];
+  try {
+    for (const f of files) saved.push(await saveUpload(f, opts));
+    return saved;
+  } catch (e) {
+    await releaseUploads(saved.map((f) => f.id));
+    throw e;
+  }
+}
+
+/** A file row that no record points at. Keep in sync with the relations on `model File`. */
+const UNUSED = {
+  posts: { none: {} },
+  products: { none: {} },
+  productLogos: { none: {} },
+  productBgs: { none: {} },
+  testimonials: { none: {} },
+  clientLogos: { none: {} },
+  caseCovers: { none: {} },
+  caseLogos: { none: {} },
+  issueAttachments: { none: {} },
+  coreIssueFiles: { none: {} },
+  employees: { none: {} },
+  awards: { none: {} },
+  downloads: { none: {} },
+} satisfies Prisma.FileWhereInput;
+
+/**
+ * Deletes files (row and disk) that a record just stopped using: a replaced or removed picture,
+ * or the files of a deleted record. A file still referenced anywhere is kept, and so are files
+ * imported from the old CMS, which old rich text may still link to by URL.
+ * Never throws: cleanup must not fail the save that triggered it.
+ */
+export async function releaseUploads(ids: Iterable<string | null | undefined>) {
+  const list = [...new Set([...ids].filter((v): v is string => !!v))];
+  if (!list.length) return;
+  try {
+    const files = await db.file.findMany({ where: { id: { in: list }, legacyId: null, ...UNUSED } });
+    for (const f of files) {
+      // Re-checked in the delete itself, in case something started using the file meanwhile.
+      const { count } = await db.file.deleteMany({ where: { id: f.id, legacyId: null, ...UNUSED } });
+      if (count) await fs.rm(filePath(f), { force: true });
+    }
+  } catch (e) {
+    console.error("[uploads] cleanup failed", list, e);
   }
 }
 

@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { normalizeLogo } from "@/lib/logo-image";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { slugify } from "@/lib/slug";
-import { IMAGE_TYPES, saveUpload, UploadError } from "@/lib/uploads";
+import { IMAGE_TYPES, releaseUploads, saveUpload, UploadError } from "@/lib/uploads";
 import type { FormState } from "./contact";
 
 const errorsOf = (e: z.ZodError) => Object.fromEntries(e.issues.map((i) => [String(i.path[0]), i.message]));
@@ -87,15 +87,23 @@ export async function saveTestimonial(_prev: FormState, formData: FormData): Pro
     isPublic: formData.get("isPublic") === "on",
     ...(photoId !== undefined ? { photoId } : {}),
   };
-  if (id) await db.testimonial.update({ where: { id }, data });
-  else await db.testimonial.create({ data });
+  const prev = id && photoId !== undefined ? await db.testimonial.findUnique({ where: { id }, select: { photoId: true } }) : null;
+  try {
+    if (id) await db.testimonial.update({ where: { id }, data });
+    else await db.testimonial.create({ data });
+  } catch (e) {
+    await releaseUploads([photoId]);
+    throw e;
+  }
+  if (prev?.photoId !== photoId) await releaseUploads([prev?.photoId]);
   changed();
   return { ok: true, message: "Хадгалагдлаа." };
 }
 
 export async function deleteTestimonial(id: string) {
   await requireStaff({ admin: true });
-  await db.testimonial.delete({ where: { id } });
+  const { photoId } = await db.testimonial.delete({ where: { id }, select: { photoId: true } });
+  await releaseUploads([photoId]);
   changed();
 }
 
@@ -126,15 +134,23 @@ export async function saveClientLogo(_prev: FormState, formData: FormData): Prom
   }
   if (!logoId && !id) return { ok: false, message: "Лого оруулна уу.", errors: { logo: "Лого заавал" } };
   const data = { ...parsed.data, isPublic: formData.get("isPublic") === "on" };
-  if (id) await db.clientLogo.update({ where: { id }, data: { ...data, ...(logoId ? { logoId } : {}) } });
-  else await db.clientLogo.create({ data: { ...data, logoId: logoId! } });
+  const prev = id && logoId ? await db.clientLogo.findUnique({ where: { id }, select: { logoId: true } }) : null;
+  try {
+    if (id) await db.clientLogo.update({ where: { id }, data: { ...data, ...(logoId ? { logoId } : {}) } });
+    else await db.clientLogo.create({ data: { ...data, logoId: logoId! } });
+  } catch (e) {
+    await releaseUploads([logoId]);
+    throw e;
+  }
+  if (prev && prev.logoId !== logoId) await releaseUploads([prev.logoId]);
   changed();
   return { ok: true, message: "Хадгалагдлаа." };
 }
 
 export async function deleteClientLogo(id: string) {
   await requireStaff({ admin: true });
-  await db.clientLogo.delete({ where: { id } });
+  const { logoId } = await db.clientLogo.delete({ where: { id }, select: { logoId: true } });
+  await releaseUploads([logoId]);
   changed();
 }
 
@@ -204,9 +220,14 @@ export async function saveCaseStudy(_prev: FormState, formData: FormData): Promi
   let coverId: string | null | undefined, logoId: string | null | undefined;
   try {
     coverId = await picture(formData, "cover");
-    logoId = await picture(formData, "logo");
   } catch (e) {
     return uploadError("cover", e);
+  }
+  try {
+    logoId = await picture(formData, "logo");
+  } catch (e) {
+    await releaseUploads([coverId]); // don't keep the cover uploaded by this failed save
+    return uploadError("logo", e);
   }
   const productIds = idList(formData.getAll("products"));
   const publish = formData.get("published") === "on";
@@ -220,9 +241,21 @@ export async function saveCaseStudy(_prev: FormState, formData: FormData): Promi
     ...(coverId !== undefined ? { coverId } : {}),
     ...(logoId !== undefined ? { logoId } : {}),
   };
-  const saved = id
-    ? await db.caseStudy.update({ where: { id }, data: { ...data, products: { set: productIds.map((p) => ({ id: p })) } }, select: { id: true } })
-    : await db.caseStudy.create({ data: { ...data, products: { connect: productIds.map((p) => ({ id: p })) } }, select: { id: true } });
+  const before = id ? await db.caseStudy.findUnique({ where: { id }, select: { coverId: true, logoId: true } }) : null;
+  let saved;
+  try {
+    saved = id
+      ? await db.caseStudy.update({ where: { id }, data: { ...data, products: { set: productIds.map((p) => ({ id: p })) } }, select: { id: true } })
+      : await db.caseStudy.create({ data: { ...data, products: { connect: productIds.map((p) => ({ id: p })) } }, select: { id: true } });
+  } catch (e) {
+    await releaseUploads([coverId, logoId]);
+    throw e;
+  }
+  if (before)
+    await releaseUploads([
+      coverId !== undefined && before.coverId !== coverId ? before.coverId : null,
+      logoId !== undefined && before.logoId !== logoId ? before.logoId : null,
+    ]);
   updateTag(PRODUCTS_TAG);
   changed();
   if (!id) redirect(`/admin/case-studies/${saved.id}?saved=1`);
@@ -231,7 +264,8 @@ export async function saveCaseStudy(_prev: FormState, formData: FormData): Promi
 
 export async function deleteCaseStudy(id: string) {
   await requireStaff();
-  await db.caseStudy.delete({ where: { id } });
+  const gone = await db.caseStudy.delete({ where: { id }, select: { coverId: true, logoId: true } });
+  await releaseUploads([gone.coverId, gone.logoId]);
   updateTag(TRUST_TAG);
   revalidatePath("/admin", "layout");
   redirect("/admin/case-studies");

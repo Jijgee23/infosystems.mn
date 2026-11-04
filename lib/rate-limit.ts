@@ -36,13 +36,18 @@ function recent(key: string, windowMs: number) {
   return list;
 }
 
-/** Records a request and returns true when the caller is over `limit` per `windowMs` for `bucket`. */
-export async function isRateLimited(bucket: string, limit: number, windowMs: number) {
-  const list = recent(`${bucket}:${await clientIp()}`, windowMs);
+/** Records a hit for `key` and returns true when it is over `limit` per `windowMs`. */
+export function isKeyRateLimited(key: string, limit: number, windowMs: number) {
+  const list = recent(key, windowMs);
   // Stop recording once over the limit, so a flood can't grow the list without bound.
   if (list.length > limit) return true;
   list.push(Date.now());
   return list.length > limit;
+}
+
+/** Records a request and returns true when the caller (by IP) is over `limit` per `windowMs` for `bucket`. */
+export async function isRateLimited(bucket: string, limit: number, windowMs: number) {
+  return isKeyRateLimited(`${bucket}:${await clientIp()}`, limit, windowMs);
 }
 
 /**

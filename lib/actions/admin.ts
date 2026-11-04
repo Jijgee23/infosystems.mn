@@ -19,7 +19,7 @@ import { TRUST_TAG } from "@/lib/data/trust";
 import { UPDATES_TAG } from "@/lib/data/updates";
 import { normalizePersonalRegister, PERSONAL_REGISTER } from "@/lib/register-number";
 import { fromDateInput, fromLocalInput } from "@/lib/time";
-import { IMAGE_TYPES, saveUpload, UploadError } from "@/lib/uploads";
+import { IMAGE_TYPES, releaseUploads, saveUpload, UploadError } from "@/lib/uploads";
 import type { FormState } from "./contact";
 
 const SITE_URL = process.env.SITE_URL ?? "https://infosystems.mn";
@@ -71,7 +71,15 @@ export async function savePost(_prev: FormState, formData: FormData): Promise<Fo
     ...(imageId !== undefined ? { imageId } : {}),
   };
 
-  const saved = id ? await db.post.update({ where: { id }, data, select: { id: true } }) : await db.post.create({ data, select: { id: true } });
+  const prev = id && imageId !== undefined ? await db.post.findUnique({ where: { id }, select: { imageId: true } }) : null;
+  let saved;
+  try {
+    saved = id ? await db.post.update({ where: { id }, data, select: { id: true } }) : await db.post.create({ data, select: { id: true } });
+  } catch (e) {
+    await releaseUploads([imageId]);
+    throw e;
+  }
+  if (prev?.imageId !== imageId) await releaseUploads([prev?.imageId]);
   updateTag(POSTS_TAG);
   if (!id) redirect(`/admin/posts/${saved.id}?saved=1`);
   refresh();
@@ -80,7 +88,8 @@ export async function savePost(_prev: FormState, formData: FormData): Promise<Fo
 
 export async function deletePost(id: string) {
   await requireStaff();
-  await db.post.delete({ where: { id } });
+  const { imageId } = await db.post.delete({ where: { id }, select: { imageId: true } });
+  await releaseUploads([imageId]);
   updateTag(POSTS_TAG);
   redirect("/admin/posts");
 }
@@ -272,6 +281,8 @@ export async function saveProduct(_prev: FormState, formData: FormData): Promise
         await db.file.update({ where: { id: file.id }, data: { width: dim("Width"), height: dim("Height") } });
         pictures[key] = file.id;
       } catch (e) {
+        // Don't keep the pictures already uploaded by this failed save.
+        await releaseUploads(Object.values(pictures));
         if (e instanceof UploadError) return { ok: false, message: e.message, errors: { [field]: e.message } };
         throw e;
       }
@@ -307,10 +318,19 @@ export async function saveProduct(_prev: FormState, formData: FormData): Promise
   // Only one main product (also enforced by products_single_main_key): the previous one
   // becomes a featured card.
   const demoted = data.group === "main" ? await db.product.findFirst({ where: { group: "main", ...(id ? { NOT: { id } } : {}) }, select: { name: true } }) : null;
-  const saved = await db.$transaction(async (tx) => {
-    if (demoted) await tx.product.updateMany({ where: { group: "main", ...(id ? { NOT: { id } } : {}) }, data: { group: "featured" } });
-    return id ? tx.product.update({ where: { id }, data, select: { id: true } }) : tx.product.create({ data, select: { id: true } });
-  });
+  const before = id ? await db.product.findUnique({ where: { id }, select: { imageId: true, logoId: true, backgroundId: true } }) : null;
+  let saved;
+  try {
+    saved = await db.$transaction(async (tx) => {
+      if (demoted) await tx.product.updateMany({ where: { group: "main", ...(id ? { NOT: { id } } : {}) }, data: { group: "featured" } });
+      return id ? tx.product.update({ where: { id }, data, select: { id: true } }) : tx.product.create({ data, select: { id: true } });
+    });
+  } catch (e) {
+    await releaseUploads(Object.values(pictures));
+    throw e;
+  }
+  // Pictures this save replaced or removed.
+  if (before) await releaseUploads((Object.keys(pictures) as (keyof typeof pictures)[]).map((k) => (before[k] !== pictures[k] ? before[k] : null)));
   productsChanged();
   if (!id) redirect(`/admin/products/${saved.id}?saved=1`);
   refresh();
@@ -321,7 +341,8 @@ export async function deleteProduct(id: string) {
   await requireStaff();
   if (await db.product.count({ where: { parentId: id } })) throw new Error("Эхлээд модулиудыг устгана уу.");
   // Customer links and page blocks are removed with it; issues keep their history with no product.
-  await db.product.delete({ where: { id } });
+  const gone = await db.product.delete({ where: { id }, select: { imageId: true, logoId: true, backgroundId: true } });
+  await releaseUploads([gone.imageId, gone.logoId, gone.backgroundId]);
   productsChanged();
   redirect("/admin/products");
 }
@@ -486,8 +507,11 @@ export async function saveNotification(_prev: FormState, formData: FormData): Pr
     isActive: formData.get("isActive") === "on" ? 1 : 0,
     publishedAt: new Date(),
   };
-  if (id) await db.insertNotification.update({ where: { id }, data });
-  else {
+  if (id) {
+    const prev = await db.insertNotification.findUnique({ where: { id }, select: { fileUrl: true } });
+    await db.insertNotification.update({ where: { id }, data });
+    if (prev?.fileUrl && prev.fileUrl !== data.fileUrl) await releaseNotificationPdf(prev.fileUrl);
+  } else {
     await db.insertNotification.create({ data });
     redirect("/admin/notifications");
   }
@@ -497,8 +521,16 @@ export async function saveNotification(_prev: FormState, formData: FormData): Pr
 
 export async function deleteNotification(id: string) {
   await requireStaff();
-  await db.insertNotification.delete({ where: { id } });
+  const { fileUrl } = await db.insertNotification.delete({ where: { id }, select: { fileUrl: true } });
+  if (fileUrl) await releaseNotificationPdf(fileUrl);
   redirect("/admin/notifications");
+}
+
+/** Notifications keep their PDF by URL, not by file id: free it once no notification links to it. */
+async function releaseNotificationPdf(url: string) {
+  if (await db.insertNotification.count({ where: { fileUrl: url } })) return;
+  const files = await db.file.findMany({ where: { url }, select: { id: true } });
+  await releaseUploads(files.map((f) => f.id));
 }
 
 // ---------------- Version history ----------------

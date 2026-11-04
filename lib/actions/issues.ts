@@ -3,16 +3,19 @@
 import { idParam } from "@/lib/ids";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { getSessionUser, isStaff, LOGIN_PATH, type Realm } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { NOTIFY_TO, sendMail } from "@/lib/mail";
 import { textToHtml } from "@/lib/sanitize";
 import fs from "node:fs/promises";
-import { filesFrom, filePath, IMAGE_TYPES, DOC_TYPES, saveUpload, UploadError } from "@/lib/uploads";
+import { filesFrom, filePath, IMAGE_TYPES, DOC_TYPES, releaseUploads, saveUploads, UploadError } from "@/lib/uploads";
+import { isKeyRateLimited } from "@/lib/rate-limit";
 import type { FormState } from "./contact";
 
 const SITE_URL = process.env.SITE_URL ?? "https://infosystems.mn";
+const TOO_MANY = "Хэт олон удаа илгээлээ. Түр хүлээгээд дахин оролдоно уу.";
 
 const IssueSchema = z.object({
   productId: z.string().transform((v) => idParam(v) ?? undefined).optional(),
@@ -37,39 +40,50 @@ export async function createIssue(_prev: FormState, formData: FormData): Promise
 
   const uploads = filesFrom(formData, "attachments");
   if (uploads.length > 5) return { ok: false, message: "Хамгийн ихдээ 5 файл хавсаргана." };
+  // Each issue mails the team inbox and may carry 50 MB, so even a signed-in account is limited.
+  if (isKeyRateLimited(`issue:${user.id}`, 10, 60 * 60_000)) return { ok: false, message: TOO_MANY };
   let saved;
   try {
-    saved = await Promise.all(uploads.map((f) => saveUpload(f, { types: [...IMAGE_TYPES, ...DOC_TYPES], private: true })));
+    saved = await saveUploads(uploads, { types: [...IMAGE_TYPES, ...DOC_TYPES], private: true });
   } catch (e) {
     if (e instanceof UploadError) return { ok: false, message: e.message };
     throw e;
   }
 
-  const issue = await db.productIssue.create({
-    data: {
-      title,
-      content: textToHtml(content),
-      productId: productId ?? null,
-      userId: user.id,
-      attachments: { create: saved.map((f) => ({ fileId: f.id })) },
-    },
-    select: { id: true },
-  });
+  let issue;
+  try {
+    issue = await db.productIssue.create({
+      data: {
+        title,
+        content: textToHtml(content),
+        productId: productId ?? null,
+        userId: user.id,
+        attachments: { create: saved.map((f) => ({ fileId: f.id })) },
+      },
+      select: { id: true },
+    });
+  } catch (e) {
+    await releaseUploads(saved.map((f) => f.id));
+    throw e;
+  }
 
-  await sendMail({
-    to: NOTIFY_TO,
-    replyTo: user.email,
-    subject: `Шинэ асуудал — ${user.companyName ?? user.username} · InfoSystems`,
-    content: {
-      kicker: "Шинэ асуудал",
-      title,
-      intro: `${user.companyName ?? user.username} харилцагчийн булангаас шинэ асуудал илгээлээ.`,
-      bodyHtml: textToHtml(content),
-      button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/issues/${issue.id}` },
-      footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
-    },
-  });
-  redirect(`/portal/issues/${issue.id}`);
+  const issueId = issue.id;
+  after(() =>
+    sendMail({
+      to: NOTIFY_TO,
+      replyTo: user.email,
+      subject: `Шинэ асуудал — ${user.companyName ?? user.username} · InfoSystems`,
+      content: {
+        kicker: "Шинэ асуудал",
+        title,
+        intro: `${user.companyName ?? user.username} харилцагчийн булангаас шинэ асуудал илгээлээ.`,
+        bodyHtml: textToHtml(content),
+        button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/issues/${issueId}` },
+        footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
+      },
+    }),
+  );
+  redirect(`/portal/issues/${issueId}`);
 }
 
 /** Reply from the portal (realm "customer") or the admin (realm "staff"); bound by the page. */
@@ -84,6 +98,7 @@ export async function replyToIssue(realm: Realm, _prev: FormState, formData: For
   const issue = issueId ? await db.productIssue.findUnique({ where: { id: issueId }, include: { user: true } }) : null;
   const staff = isStaff(user);
   if (!issueId || !issue || (!staff && issue.userId !== user.id)) return { ok: false, message: "Асуудал олдсонгүй." };
+  if (!staff && isKeyRateLimited(`reply:${user.id}`, 30, 60 * 60_000)) return { ok: false, message: TOO_MANY };
 
   await db.issueAnswer.create({ data: { issueId, userId: user.id, content: textToHtml(content) } });
   // A customer reply reopens the thread for staff.
@@ -92,33 +107,39 @@ export async function replyToIssue(realm: Realm, _prev: FormState, formData: For
     data: staff ? { updatedAt: new Date() } : { seen: false, resolved: false, updatedAt: new Date() },
   });
 
-  if (staff && issue.user?.email) {
-    await sendMail({
-      to: issue.user.email,
-      replyTo: NOTIFY_TO,
-      subject: `«${issue.title}» асуудалд хариулт ирлээ · InfoSystems`,
-      content: {
-        kicker: "Асуудлын хариулт",
-        title: issue.title,
-        intro: "Сайн байна уу. Таны илгээсэн асуудалд манай мэргэжилтэн хариулт бичлээ.",
-        bodyHtml: textToHtml(content),
-        button: { label: "Харилцагчийн буланд харах", url: `${SITE_URL}/portal/issues/${issueId}` },
-      },
-    });
+  // Sent after the response, so a slow SMTP server doesn't hold up the reply form.
+  const customerEmail = issue.user?.email;
+  if (staff && customerEmail) {
+    after(() =>
+      sendMail({
+        to: customerEmail,
+        replyTo: NOTIFY_TO,
+        subject: `«${issue.title}» асуудалд хариулт ирлээ · InfoSystems`,
+        content: {
+          kicker: "Асуудлын хариулт",
+          title: issue.title,
+          intro: "Сайн байна уу. Таны илгээсэн асуудалд манай мэргэжилтэн хариулт бичлээ.",
+          bodyHtml: textToHtml(content),
+          button: { label: "Харилцагчийн буланд харах", url: `${SITE_URL}/portal/issues/${issueId}` },
+        },
+      }),
+    );
   } else if (!staff) {
-    await sendMail({
-      to: NOTIFY_TO,
-      replyTo: user.email,
-      subject: `Асуудалд нэмэлт — ${issue.title} · InfoSystems`,
-      content: {
-        kicker: "Асуудалд нэмэлт",
-        title: issue.title,
-        intro: `${user.companyName ?? user.username} асуудалдаа нэмэлт бичлээ.`,
-        bodyHtml: textToHtml(content),
-        button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/issues/${issueId}` },
-        footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
-      },
-    });
+    after(() =>
+      sendMail({
+        to: NOTIFY_TO,
+        replyTo: user.email,
+        subject: `Асуудалд нэмэлт — ${issue.title} · InfoSystems`,
+        content: {
+          kicker: "Асуудалд нэмэлт",
+          title: issue.title,
+          intro: `${user.companyName ?? user.username} асуудалдаа нэмэлт бичлээ.`,
+          bodyHtml: textToHtml(content),
+          button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/issues/${issueId}` },
+          footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
+        },
+      }),
+    );
   }
   refresh();
   return { ok: true, message: "" };
