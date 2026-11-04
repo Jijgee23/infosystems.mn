@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/form";
 import { deleteVersion, saveVersion } from "@/lib/actions/admin";
 import { ActionForm } from "@/components/ui/action-form";
 import { useCloseOnSave } from "@/components/admin/list-editor";
+import { toLocalInput } from "@/lib/time";
 
 const INPUT = "h-10 rounded-xl border border-line bg-card px-3 text-sm text-fg focus:border-brand focus:outline-none";
 
@@ -21,7 +22,8 @@ export function VersionRow({ row }: { row: Row | null }) {
     setLastState(state);
     if (!row && state?.ok) setFormKey((k) => k + 1);
   }
-  const today = new Date().toISOString().slice(0, 10);
+  // Ulaanbaatar date: toISOString() is UTC, which is still «yesterday» before 08:00 here.
+  const today = toLocalInput(new Date()).slice(0, 10);
   return (
     <div className="rounded-2xl border border-line bg-card p-3">
       <ActionForm

@@ -33,7 +33,7 @@ export default function PricingPage() {
               <p className="mt-4 max-w-2xl text-lg leading-relaxed text-fg-muted">Танай байгууллагын хэрэгцээнд тохирсон бүтээгдэхүүн, модулийг сонгон үнийн саналыг бид гаргаж өгнө.</p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:col-span-4 lg:justify-end">
-              <Link className="inline-flex items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap transition-colors duration-200 bg-brand text-white shadow-sm shadow-brand/20 hover:bg-brand-strong dark:text-ink h-12 px-6 text-base" href="/contact">
+              <Link className="inline-flex items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap transition-colors duration-200 bg-brand text-white shadow-sm shadow-brand/20 hover:bg-brand-strong dark:text-ink h-12 px-6 text-base" href="/contact?kind=quote">
                 Үнийн санал авах{" "}
                 <svg aria-hidden="true" className="lucide lucide-arrow-right h-4 w-4" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M5 12h14" />
@@ -51,7 +51,7 @@ export default function PricingPage() {
               <h2 className="text-3xl font-bold text-fg">Үнийн санал авах</h2>
               <p className="mt-3 leading-relaxed text-fg-muted">Танай байгууллагын хэмжээ, хэрэгцээг сонсоод тохирох бүтээгдэхүүн, модуль болон үнийн саналыг гаргаж өгнө.</p>
               <div className="mt-7 flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
-                <Link className="inline-flex items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap transition-colors duration-200 bg-brand text-white shadow-sm shadow-brand/20 hover:bg-brand-strong dark:text-ink h-12 px-6 text-base" href="/contact">
+                <Link className="inline-flex items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap transition-colors duration-200 bg-brand text-white shadow-sm shadow-brand/20 hover:bg-brand-strong dark:text-ink h-12 px-6 text-base" href="/contact?kind=quote">
                   Үнийн санал авах{" "}
                   <svg aria-hidden="true" className="lucide lucide-arrow-right h-4 w-4" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                     <path d="M5 12h14" />
@@ -65,7 +65,7 @@ export default function PricingPage() {
               <p className="mb-3 text-xs font-semibold tracking-wider text-fg-subtle uppercase">Үнийн санал авах боломжтой бүтээгдэхүүн</p>
               <ul className="grid gap-2 sm:grid-cols-2">
                 <li>
-                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact">
+                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact?kind=quote&product=MACS%20ERP">
                     <svg aria-hidden="true" className="lucide lucide-layout-grid h-4 w-4 text-fg-subtle group-hover:text-brand" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                       <rect height="7" rx="1" width="7" x="3" y="3" />
                       <rect height="7" rx="1" width="7" x="14" y="3" />
@@ -80,7 +80,7 @@ export default function PricingPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact">
+                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact?kind=quote&product=MACS%20POS">
                     <svg aria-hidden="true" className="lucide lucide-scan-barcode h-4 w-4 text-fg-subtle group-hover:text-brand" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                       <path d="M3 7V5a2 2 0 0 1 2-2h2" />
                       <path d="M17 3h2a2 2 0 0 1 2 2v2" />
@@ -98,7 +98,7 @@ export default function PricingPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact">
+                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact?kind=quote&product=PACS">
                     <svg aria-hidden="true" className="lucide lucide-folder-kanban h-4 w-4 text-fg-subtle group-hover:text-brand" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                       <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
                       <path d="M8 10v4" />
@@ -113,7 +113,7 @@ export default function PricingPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact">
+                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact?kind=quote&product=COST">
                     <svg aria-hidden="true" className="lucide lucide-calculator h-4 w-4 text-fg-subtle group-hover:text-brand" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                       <rect height="20" rx="2" width="16" x="4" y="2" />
                       <line x1="8" x2="16" y1="6" y2="6" />
@@ -134,7 +134,7 @@ export default function PricingPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact">
+                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact?kind=quote&product=Macs%20Freight">
                     <svg aria-hidden="true" className="lucide lucide-truck h-4 w-4 text-fg-subtle group-hover:text-brand" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                       <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
                       <path d="M15 18H9" />
@@ -150,7 +150,7 @@ export default function PricingPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact">
+                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact?kind=quote&product=Macs%20Attendance">
                     <svg aria-hidden="true" className="lucide lucide-clock h-4 w-4 text-fg-subtle group-hover:text-brand" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                       <path d="M12 6v6l4 2" />
                       <circle cx="12" cy="12" r="10" />
@@ -163,7 +163,7 @@ export default function PricingPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact">
+                  <Link className="group flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3 transition-colors hover:border-brand/40" href="/contact?kind=quote&product=Contractus">
                     <svg aria-hidden="true" className="lucide lucide-signature h-4 w-4 text-fg-subtle group-hover:text-brand" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                       <path d="m21 17-2.156-1.868A.5.5 0 0 0 18 15.5v.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1c0-2.545-3.991-3.97-8.5-4a1 1 0 0 0 0 5c4.153 0 4.745-11.295 5.708-13.5a2.5 2.5 0 1 1 3.31 3.284" />
                       <path d="M3 21h18" />

@@ -50,7 +50,7 @@ export function UserForm({ user, products, ownedIds, canEditRole, isSelf }: { us
       <div className="space-y-6">
         <Card className="space-y-4">
           <label className="flex items-center gap-2 text-sm font-semibold text-fg">
-            <input className="h-4 w-4" defaultChecked={user.adminConfirmed} name="adminConfirmed" type="checkbox" />
+            <input className="h-4 w-4" defaultChecked={user.adminConfirmed} disabled={isSelf} name="adminConfirmed" type="checkbox" />
             Баталгаажсан <span className="font-normal text-fg-subtle">(анх идэвхжүүлэхэд мэйл илгээнэ)</span>
           </label>
           <label className="flex items-center gap-2 text-sm font-semibold text-fg">

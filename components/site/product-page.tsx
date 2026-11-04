@@ -8,7 +8,7 @@ import { ProductSolutions, ProductUpdates } from "@/components/site/product-extr
 import { CaseStudies, Testimonials } from "@/components/site/trust";
 import { VideoButton } from "@/components/site/video-button";
 import { formatPhone, getCompany, telHref } from "@/lib/data/company";
-import { getProductNav, type ProductPageData } from "@/lib/data/products";
+import { getComparison, getProductNav, type ProductPageData } from "@/lib/data/products";
 import { getUpdates } from "@/lib/data/updates";
 import { ProductMark } from "@/lib/product-icons";
 import { sanitizeHtml } from "@/lib/sanitize";
@@ -35,7 +35,9 @@ function productLd(p: ProductPageData, url: string) {
 
 /** Page of a top-level product (/products/<slug>). */
 export async function ProductView({ product: p }: { product: ProductPageData }) {
-  const [company, nav, updates] = await Promise.all([getCompany(), getProductNav(), getUpdates(p.versionNames, 1)]);
+  const [company, nav, updates, comparison] = await Promise.all([getCompany(), getProductNav(), getUpdates(p.versionNames, 1), getComparison()]);
+  // Same condition as ProductComparison on /products: the link needs the #compare section to exist.
+  const canCompare = p.inComparison && comparison.products.length >= 2 && comparison.rows.length > 0;
   // Without blocks or release notes the «Дэлгэрэнгүй» column would be empty: the side
   // cards then fill the row instead.
   const hasBody = p.blocks.length > 0 || updates.length > 0;
@@ -129,7 +131,7 @@ export async function ProductView({ product: p }: { product: ProductPageData }) 
             <div className={hasBody ? "space-y-6 lg:sticky lg:top-24" : "grid items-start gap-6 md:grid-cols-2 lg:grid-cols-3"}>
               {!comingSoon && <ContactCard company={company} />}
               <ProductSolutions solutions={p.solutions} />
-              {p.inComparison && (
+              {canCompare && (
                 <Link className="flex items-center justify-between gap-3 rounded-3xl border border-line p-5 text-sm font-semibold text-fg transition-colors hover:border-brand/40 hover:text-brand" href="/products#compare">
                   Бусад бүтээгдэхүүнтэй харьцуулах <ArrowRight className="h-4 w-4 shrink-0" />
                 </Link>
@@ -149,9 +151,10 @@ export async function ProductView({ product: p }: { product: ProductPageData }) 
 export async function ModuleView({ product: p }: { product: ProductPageData }) {
   const company = await getCompany();
   const parent = p.parent!;
+  // `siblings` holds listed modules only; an unlisted module isn't in the sequence, so it gets no prev/next.
   const i = p.siblings.findIndex((s) => s.slug === p.slug);
-  const prev = p.siblings[i - 1];
-  const next = p.siblings[i + 1];
+  const prev = i > 0 ? p.siblings[i - 1] : undefined;
+  const next = i >= 0 ? p.siblings[i + 1] : undefined;
   const href = (slug: string) => `/products/${parent.slug}/${slug}`;
   return (
     <main id="main">

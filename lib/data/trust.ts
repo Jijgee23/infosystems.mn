@@ -83,12 +83,19 @@ export async function getTestimonials(productId?: string) {
   const rows = await db.testimonial.findMany({
     where: { isPublic: true, ...(productId ? { productId } : {}) },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-    select: { id: true, quote: true, authorName: true, authorTitle: true, companyName: true, photo: { select: { url: true } }, product: { select: { name: true } } },
+    select: { id: true, quote: true, authorName: true, authorTitle: true, companyName: true, photo: { select: { url: true } }, product: { select: { name: true, publishedAt: true } } },
   });
-  return rows.map(({ photo, product, ...t }) => ({ ...t, photoUrl: photo?.url ?? null, productName: product?.name ?? null }));
+  // A product that isn't released yet isn't named.
+  const now = new Date();
+  return rows.map(({ photo, product, ...t }) => ({
+    ...t,
+    photoUrl: photo?.url ?? null,
+    productName: product?.publishedAt && product.publishedAt <= now ? product.name : null,
+  }));
 }
 
-const caseSelect = {
+/** A function, not a constant: the «published» filter on products needs the current time. */
+const caseSelect = () => ({
   id: true,
   title: true,
   slug: true,
@@ -98,8 +105,12 @@ const caseSelect = {
   highlights: true,
   cover: { select: { url: true, width: true, height: true } },
   logo: { select: { url: true } },
-  products: { select: { slug: true, name: true, parent: { select: { slug: true } } } },
-} as const;
+  // Only products whose page exists: published, and for a module, a published parent.
+  products: {
+    where: { ...published(), OR: [{ parentId: null }, { parent: published() }] },
+    select: { slug: true, name: true, parent: { select: { slug: true } } },
+  },
+});
 
 /** "value | label" lines → up to three headline results. */
 export const parseHighlights = (text: string | null) =>
@@ -127,7 +138,7 @@ export async function getCaseStudies(productId?: string) {
   const rows = await db.caseStudy.findMany({
     where: { ...published(), ...(productId ? { products: { some: { id: productId } } } : {}) },
     orderBy: [{ sortOrder: "asc" }, { publishedAt: "desc" }],
-    select: caseSelect,
+    select: caseSelect(),
   });
   return rows.map(toCard);
 }
@@ -136,6 +147,6 @@ export async function getCaseStudy(slug: string) {
   "use cache";
   cacheLife(lifeUntil(await nextPublishAt("caseStudy"), "days"));
   cacheTag(TRUST_TAG, `case:${slug}`);
-  const row = await db.caseStudy.findFirst({ where: { slug, ...published() }, select: { ...caseSelect, body: true, publishedAt: true } });
+  const row = await db.caseStudy.findFirst({ where: { slug, ...published() }, select: { ...caseSelect(), body: true, publishedAt: true } });
   return row ? toCard(row) : null;
 }

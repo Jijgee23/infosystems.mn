@@ -6,9 +6,10 @@ import { readBody, strapiError, verifyLicenseToken } from "@/lib/legacy";
  */
 export async function POST(req: Request) {
   const body = await readBody(req);
-  if (!body.token) return strapiError(400, "токен - оо дамжуулна уу");
   const header = req.headers.get("authorization");
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : String(body.token);
+  // Either one is enough; the header wins when both are sent.
+  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : body.token ? String(body.token) : "";
+  if (!token) return strapiError(400, "токен - оо дамжуулна уу");
   try {
     await verifyLicenseToken(token);
   } catch {

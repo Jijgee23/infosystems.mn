@@ -1,6 +1,6 @@
 import "server-only";
 import { type HTMLElement, parse } from "node-html-parser";
-import { sanitizeHtml } from "@/lib/sanitize";
+import { PARSE_OPTIONS, sanitizeHtml } from "@/lib/sanitize";
 
 /** YouTube video id from a watch / youtu.be / shorts / embed link, or null. */
 export function youtubeId(url: string | undefined) {
@@ -41,7 +41,7 @@ const videoCard = (id: string, href: string) =>
  * - tables get a scrolling wrapper, so wide ones don't push the page sideways.
  */
 export function renderRichBody(html: string | null | undefined, zoomGroup = "content") {
-  const root = parse(sanitizeHtml(html));
+  const root = parse(sanitizeHtml(html), PARSE_OPTIONS);
   for (const p of root.querySelectorAll("p")) {
     const a = only(p, "a");
     const id = a && youtubeId(a.getAttribute("href"));

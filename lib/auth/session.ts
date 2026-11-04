@@ -99,9 +99,16 @@ export const getSessionUser = cache(async (realm: Realm = "customer"): Promise<S
   return { id: u.id, email: u.email, username: u.username, companyName: u.companyName, companyRegister: toNum(u.companyRegister), customerType: u.customerType, personalRegister: u.personalRegister, role: u.role };
 });
 
-export async function requireUser(next = "/portal") {
+/**
+ * The signed-in customer, or a redirect to the login page that comes back to `next`.
+ * Without `next` (e.g. in the portal layout) the page being requested is used, as set by proxy.ts.
+ */
+export async function requireUser(next?: string) {
   const u = await getSessionUser("customer");
-  if (!u) redirect(`${LOGIN_PATH.customer}?next=${encodeURIComponent(next)}`);
+  if (!u) {
+    const back = next ?? (await headers()).get("x-portal-path") ?? "/portal";
+    redirect(`${LOGIN_PATH.customer}?next=${encodeURIComponent(back)}`);
+  }
   return u;
 }
 

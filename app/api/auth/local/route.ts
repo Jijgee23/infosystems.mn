@@ -1,3 +1,4 @@
+import { isStaffRole } from "@/lib/auth/session";
 import { db, toNum } from "@/lib/db";
 import { issueLicenseToken, readBody, strapiError } from "@/lib/legacy";
 import { isRateLimited } from "@/lib/rate-limit";
@@ -25,7 +26,8 @@ export async function POST(req: Request) {
     (register ? await db.user.findUnique({ where: { companyRegister: register } }) : null) ??
     (email ? await db.user.findUnique({ where: { email } }) : null);
 
-  if (!user || user.blocked) {
+  // Staff accounts never hold a license; treat them like an unknown customer.
+  if (!user || user.blocked || isStaffRole(user.role)) {
     // Strapi's ctx.badRequest(null, formatError(...)) shape.
     const detail = [{ messages: [{ message: "Энэ байгууллага Infosystems.mn - д бүртгэлгүй байна" }] }];
     return Response.json({ statusCode: 400, error: "Bad Request", message: detail, data: detail }, { status: 400 });

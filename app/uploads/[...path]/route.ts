@@ -14,7 +14,12 @@ const TYPES: Record<string, string> = {
 
 /** GET /uploads/* — serves files from UPLOAD_DIR (same URLs as the old Strapi /uploads). */
 export async function GET(req: Request, ctx: RouteContext<"/uploads/[...path]">) {
-  const parts = (await ctx.params).path.map((p) => decodeURIComponent(p));
+  let parts: string[];
+  try {
+    parts = (await ctx.params).path.map((p) => decodeURIComponent(p));
+  } catch {
+    return new Response("Not found", { status: 404 }); // malformed escape such as a stray %
+  }
   const file = path.resolve(UPLOAD_DIR, ...parts);
   if (!file.startsWith(UPLOAD_DIR + path.sep)) return new Response("Not found", { status: 404 });
   const ext = path.extname(file).toLowerCase();

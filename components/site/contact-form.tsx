@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useActionState } from "react";
 import { submitContact, type FormState } from "@/lib/actions/contact";
 import { ActionForm } from "@/components/ui/action-form";
@@ -14,7 +15,22 @@ function Required() {
   return <span className="ml-1 text-xs font-normal text-fg-subtle">(заавал)</span>;
 }
 
-export function ContactForm() {
+type Kind = "demo" | "quote" | "feedback";
+const KINDS: readonly Kind[] = ["demo", "quote", "feedback"];
+
+/**
+ * The form preset from the URL: /contact?kind=quote&product=MACS%20ERP (the pricing page links).
+ * Unknown values are ignored. Render inside <Suspense> (it reads search params).
+ */
+export function ContactFormFromQuery() {
+  const sp = useSearchParams();
+  const kind = KINDS.find((k) => k === sp.get("kind")) ?? "demo";
+  const product = PRODUCTS.find((p) => p === sp.get("product")) ?? "";
+  // key: a new preset (client-side navigation between links) resets the form.
+  return <ContactForm key={`${kind}:${product}`} kind={kind} product={product} />;
+}
+
+export function ContactForm({ kind = "demo", product = "" }: { kind?: Kind; product?: string } = {}) {
   const [state, action, pending] = useActionState<FormState, FormData>(submitContact, null);
   const err = (name: string) => state?.errors?.[name];
   const cls = (name: string, extra = "h-12") => `${INPUT} ${extra} ${err(name) ? "border-red-500" : "border-line"}`;
@@ -30,7 +46,7 @@ export function ContactForm() {
 
   return (
     <ActionForm action={action} className="rounded-3xl border border-line bg-card p-6 sm:p-8" noValidate>
-      <input name="kind" type="hidden" value="demo" />
+      <input name="kind" type="hidden" value={kind} />
       <div className="grid gap-5 sm:grid-cols-2">
         <Field error={err("name")} label={<>Нэр<Required /></>}>
           <input aria-invalid={!!err("name")} autoComplete="name" className={cls("name")} name="name" required />
@@ -45,7 +61,7 @@ export function ContactForm() {
           <input aria-invalid={!!err("email")} autoComplete="email" className={cls("email")} inputMode="email" name="email" required type="email" />
         </Field>
         <Field className="sm:col-span-2" label="Сонирхож буй бүтээгдэхүүн">
-          <select className={cls("product")} defaultValue="" name="product">
+          <select className={cls("product")} defaultValue={product} name="product">
             <option value="">Сонгоогүй / Зөвлөгөө авах</option>
             {PRODUCTS.map((p) => (
               <option key={p} value={p}>

@@ -1,8 +1,14 @@
 import { db } from "@/lib/db";
 import { strapiError } from "@/lib/legacy";
 import { escapeHtml, NOTIFY_TO, SITE_URL, sendMail } from "@/lib/mail";
-import { isRateLimited } from "@/lib/rate-limit";
-import { IMAGE_TYPES, saveUpload, UploadError } from "@/lib/uploads";
+import { after } from "next/server";
+import { isKeyRateLimited, isRateLimited } from "@/lib/rate-limit";
+import { IMAGE_TYPES, releaseUploads, saveUploads, UploadError } from "@/lib/uploads";
+
+// Open endpoint (no sign-in), so uploads are capped per request and requests per day overall.
+const MAX_FILES = 5;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const DAILY_LIMIT = 300;
 
 /**
  * POST /api/coreissues — Strapi-compatible create used by custom-project apps.
@@ -10,6 +16,7 @@ import { IMAGE_TYPES, saveUpload, UploadError } from "@/lib/uploads";
  */
 export async function POST(req: Request) {
   if (await isRateLimited("coreissues", 20, 60 * 60_000)) return strapiError(429, "Too many requests");
+  if (isKeyRateLimited("coreissues:all", DAILY_LIMIT, 24 * 60 * 60_000)) return strapiError(429, "Too many requests");
 
   let data: Record<string, unknown> = {};
   let uploads: File[] = [];
@@ -18,13 +25,15 @@ export async function POST(req: Request) {
     if (type.includes("multipart/form-data")) {
       const form = await req.formData();
       data = JSON.parse(String(form.get("data") ?? "{}"));
-      uploads = [...form.getAll("files.image"), ...form.getAll("files")].filter((f): f is File => f instanceof File && f.size > 0).slice(0, 10);
+      uploads = [...form.getAll("files.image"), ...form.getAll("files")].filter((f): f is File => f instanceof File && f.size > 0).slice(0, MAX_FILES);
     } else {
       data = await req.json();
     }
   } catch {
     return strapiError(400, "Invalid body");
   }
+  // `null`, a number or an array is valid JSON but not a request.
+  if (!data || typeof data !== "object" || Array.isArray(data)) return strapiError(400, "Invalid body");
 
   const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : null);
   const title = str(data.title, 255);
@@ -36,7 +45,8 @@ export async function POST(req: Request) {
   if (data.projectcategory != null) {
     const v = String(data.projectcategory);
     const cat = await db.projectCategory.findFirst({
-      where: /^\d+$/.test(v) ? { OR: [{ legacyId: Number(v) }, { slug: v }] } : { slug: v },
+      // Up to 9 digits, so the number always fits the integer column.
+      where: /^\d{1,9}$/.test(v) ? { OR: [{ legacyId: Number(v) }, { slug: v }] } : { slug: v },
       select: { id: true },
     });
     categoryId = cat?.id ?? null;
@@ -44,25 +54,32 @@ export async function POST(req: Request) {
 
   let files;
   try {
-    files = await Promise.all(uploads.map((f) => saveUpload(f, { types: IMAGE_TYPES, private: true })));
+    files = await saveUploads(uploads, { types: IMAGE_TYPES, maxBytes: MAX_FILE_BYTES, private: true });
   } catch (e) {
     if (e instanceof UploadError) return strapiError(400, e.message);
     throw e;
   }
 
-  const row = await db.coreIssue.create({
-    data: {
-      title,
-      description: description ? escapeHtml(description).replace(/\n/g, "<br>") : null,
-      name: str(data.name, 255),
-      email: str(data.email, 255),
-      categoryId,
-      files: { create: files.map((f) => ({ fileId: f.id })) },
-    },
-  });
+  let row;
+  try {
+    row = await db.coreIssue.create({
+      data: {
+        title,
+        description: description ? escapeHtml(description).replace(/\n/g, "<br>") : null,
+        name: str(data.name, 255),
+        email: str(data.email, 255),
+        categoryId,
+        files: { create: files.map((f) => ({ fileId: f.id })) },
+      },
+    });
+  } catch (e) {
+    await releaseUploads(files.map((f) => f.id));
+    throw e;
+  }
 
   const reporter = str(data.email, 255);
-  await sendMail({
+  // After the response: the desktop app shouldn't wait on SMTP.
+  after(() => sendMail({
     to: NOTIFY_TO,
     replyTo: reporter ?? undefined,
     subject: `Төслийн асуудал — ${title ?? ""} · InfoSystems`,
@@ -79,7 +96,7 @@ export async function POST(req: Request) {
       button: { label: "Админ хэсэгт харах", url: `${SITE_URL}/admin/core-issues` },
       footnote: "Энэ мэйлийг infosystems.mn сайт автоматаар илгээв.",
     },
-  });
+  }));
 
   return Response.json({
     id: row.id,

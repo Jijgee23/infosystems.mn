@@ -36,21 +36,39 @@ function recent(key: string, windowMs: number) {
   return list;
 }
 
-/** Records a request and returns true when the caller is over `limit` per `windowMs` for `bucket`. */
-export async function isRateLimited(bucket: string, limit: number, windowMs: number) {
-  const list = recent(`${bucket}:${await clientIp()}`, windowMs);
+/** Records a hit for `key` and returns true when it is over `limit` per `windowMs`. */
+export function isKeyRateLimited(key: string, limit: number, windowMs: number) {
+  const list = recent(key, windowMs);
+  // Stop recording once over the limit, so a flood can't grow the list without bound.
+  if (list.length > limit) return true;
   list.push(Date.now());
   return list.length > limit;
 }
 
+/** Records a request and returns true when the caller (by IP) is over `limit` per `windowMs` for `bucket`. */
+export async function isRateLimited(bucket: string, limit: number, windowMs: number) {
+  return isKeyRateLimited(`${bucket}:${await clientIp()}`, limit, windowMs);
+}
+
 /**
  * Failure-only limiter for sign-in forms: `blocked()` checks without recording,
- * `fail()` records a failed attempt, `reset()` clears it after a successful sign-in.
+ * `take()` reserves an attempt before the password is checked (it counts as a failure
+ * until `reset()` clears it after a successful sign-in).
+ *
+ * `take()` is synchronous on purpose: checking and recording happen in one tick, so a burst
+ * of parallel requests can't all pass the check while the first bcrypt compare is running.
  */
 export async function attemptLimiter(bucket: string, limit: number, windowMs: number) {
   const key = `${bucket}:${await clientIp()}`;
   return {
     blocked: () => recent(key, windowMs).length >= limit,
+    /** Records an attempt; false (nothing recorded) when the caller is already over the limit. */
+    take: () => {
+      const list = recent(key, windowMs);
+      if (list.length >= limit) return false;
+      list.push(Date.now());
+      return true;
+    },
     /** Failed attempts left before `blocked()` turns true. */
     remaining: () => Math.max(0, limit - recent(key, windowMs).length),
     /** Minutes until the oldest failure leaves the window and a new attempt is allowed. */
@@ -58,7 +76,6 @@ export async function attemptLimiter(bucket: string, limit: number, windowMs: nu
       const oldest = recent(key, windowMs)[0];
       return oldest ? Math.max(1, Math.ceil((oldest + windowMs - Date.now()) / 60_000)) : 0;
     },
-    fail: () => void recent(key, windowMs).push(Date.now()),
     reset: () => void hits.delete(key),
   };
 }

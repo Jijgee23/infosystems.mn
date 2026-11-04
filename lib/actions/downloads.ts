@@ -7,7 +7,7 @@ import { requireStaff } from "@/lib/auth/session";
 import { DOWNLOADS_TAG } from "@/lib/data/downloads";
 import { db } from "@/lib/db";
 import { idParam } from "@/lib/ids";
-import { DOWNLOAD_EXTS, saveUpload, UploadError } from "@/lib/uploads";
+import { DOWNLOAD_EXTS, releaseUploads, saveUpload, UploadError } from "@/lib/uploads";
 import type { FormState } from "./contact";
 
 const optional = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
@@ -56,7 +56,15 @@ export async function saveDownload(_prev: FormState, formData: FormData): Promis
     isPublic: formData.get("isPublic") === "on",
     ...(fileId !== undefined ? { fileId } : {}),
   };
-  const saved = id ? await db.download.update({ where: { id }, data, select: { id: true } }) : await db.download.create({ data, select: { id: true } });
+  let saved;
+  try {
+    saved = id ? await db.download.update({ where: { id }, data, select: { id: true } }) : await db.download.create({ data, select: { id: true } });
+  } catch (e) {
+    await releaseUploads([fileId]);
+    throw e;
+  }
+  // The file this save replaced or removed (up to 50 MB each).
+  if (fileId !== undefined && existing?.fileId !== fileId) await releaseUploads([existing?.fileId]);
   downloadsChanged();
   if (!id) redirect(`/admin/downloads/${saved.id}?saved=1`);
   refresh();
@@ -65,7 +73,8 @@ export async function saveDownload(_prev: FormState, formData: FormData): Promis
 
 export async function deleteDownload(id: string) {
   await requireStaff();
-  await db.download.delete({ where: { id } });
+  const { fileId } = await db.download.delete({ where: { id }, select: { fileId: true } });
+  await releaseUploads([fileId]);
   downloadsChanged();
   redirect("/admin/downloads");
 }

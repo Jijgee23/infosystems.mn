@@ -9,8 +9,8 @@ export function toLocalInput(d: Date | null) {
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 }
 
-/** Parses a datetime-local value as Ulaanbaatar time (UTC+8, no DST). */
-export const fromLocalInput = (v: string) => new Date(`${v}:00+08:00`);
+/** Parses a datetime-local value (seconds optional) as Ulaanbaatar time (UTC+8, no DST). */
+export const fromLocalInput = (v: string) => new Date(`${v.length === 16 ? `${v}:00` : v}+08:00`);
 
 /**
  * Postgres DATE columns come back from Prisma as midnight UTC.

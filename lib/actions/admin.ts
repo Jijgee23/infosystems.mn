@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { Prisma, UserRole } from "@/lib/generated/prisma/client";
 import { escapeHtml, sendMail } from "@/lib/mail";
 import { sanitizeHtml } from "@/lib/sanitize";
-import { SOLUTIONS } from "@/lib/site";
+import { SITE_URL, SOLUTIONS } from "@/lib/site";
 import { POST_CATEGORIES, type PostCategory } from "@/lib/post-categories";
 import { slugify } from "@/lib/slug";
 import { videoEmbedUrl } from "@/lib/video";
@@ -19,10 +19,9 @@ import { TRUST_TAG } from "@/lib/data/trust";
 import { UPDATES_TAG } from "@/lib/data/updates";
 import { normalizePersonalRegister, PERSONAL_REGISTER } from "@/lib/register-number";
 import { fromDateInput, fromLocalInput } from "@/lib/time";
-import { IMAGE_TYPES, saveUpload, UploadError } from "@/lib/uploads";
+import { IMAGE_TYPES, releaseUploads, saveUpload, UploadError } from "@/lib/uploads";
 import type { FormState } from "./contact";
 
-const SITE_URL = process.env.SITE_URL ?? "https://infosystems.mn";
 const errorsOf = (e: z.ZodError) => Object.fromEntries(e.issues.map((i) => [String(i.path[0]), i.message]));
 const optional = (v: FormDataEntryValue | null) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const isUniqueViolation = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
@@ -35,7 +34,8 @@ const PostSchema = z.object({
   category: z.enum(POST_CATEGORIES.map((c) => c.name) as [PostCategory, ...PostCategory[]]).default("Мэдээ мэдээлэл"),
   excerpt: z.string().trim().max(500).optional(),
   body: z.string().max(500_000),
-  publishedAt: z.string().optional(),
+  // datetime-local value («YYYY-MM-DDTHH:mm», seconds optional); anything else would become an Invalid Date.
+  publishedAt: z.string().regex(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?)?$/, "Огноо буруу байна").optional(),
 });
 
 export async function savePost(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -71,7 +71,17 @@ export async function savePost(_prev: FormState, formData: FormData): Promise<Fo
     ...(imageId !== undefined ? { imageId } : {}),
   };
 
-  const saved = id ? await db.post.update({ where: { id }, data, select: { id: true } }) : await db.post.create({ data, select: { id: true } });
+  const prev = id && imageId !== undefined ? await db.post.findUnique({ where: { id }, select: { imageId: true } }) : null;
+  let saved;
+  try {
+    saved = id ? await db.post.update({ where: { id }, data, select: { id: true } }) : await db.post.create({ data, select: { id: true } });
+  } catch (e) {
+    await releaseUploads([imageId]);
+    // Two saves racing for the same slug: the check above passed for both.
+    if (isUniqueViolation(e)) return { ok: false, message: "Ийм slug-тай мэдээ байна.", errors: { slug: "Давхардсан байна" } };
+    throw e;
+  }
+  if (prev?.imageId !== imageId) await releaseUploads([prev?.imageId]);
   updateTag(POSTS_TAG);
   if (!id) redirect(`/admin/posts/${saved.id}?saved=1`);
   refresh();
@@ -80,7 +90,8 @@ export async function savePost(_prev: FormState, formData: FormData): Promise<Fo
 
 export async function deletePost(id: string) {
   await requireStaff();
-  await db.post.delete({ where: { id } });
+  const { imageId } = await db.post.delete({ where: { id }, select: { imageId: true } });
+  await releaseUploads([imageId]);
   updateTag(POSTS_TAG);
   redirect("/admin/posts");
 }
@@ -123,8 +134,12 @@ export async function updateUser(_prev: FormState, formData: FormData): Promise<
   // Only admins may grant or change staff roles, and nobody can demote themselves.
   if (role !== user.role && (me.role !== "admin" || user.id === me.id)) return { ok: false, message: "Эрх өөрчлөх боломжгүй." };
 
-  const confirmed = formData.get("adminConfirmed") === "on";
+  // Nobody can unconfirm (and so lock out) themselves, like blocking below.
+  const confirmed = user.id === me.id ? true : formData.get("adminConfirmed") === "on";
+  const blocked = user.id === me.id ? false : formData.get("blocked") === "on";
   const productIds = idList(formData.getAll("products"));
+  // A reset link already mailed must not outlive an email change or a block.
+  const dropResetToken = email !== user.email || (blocked && !user.blocked);
 
   try {
     await db.$transaction([
@@ -138,13 +153,15 @@ export async function updateUser(_prev: FormState, formData: FormData): Promise<
           customerType: formData.get("customerType") === "individual" ? "individual" : "company",
           personalRegister,
           adminConfirmed: confirmed,
-          blocked: user.id === me.id ? false : formData.get("blocked") === "on",
+          blocked,
           role,
           seen: true,
+          ...(dropResetToken ? { resetToken: null, resetTokenExpires: null } : {}),
         },
       }),
-      db.userProduct.deleteMany({ where: { userId: id } }),
-      db.userProduct.createMany({ data: productIds.map((productId) => ({ userId: id, productId })) }),
+      // The form lists top-level products only, so only those links are replaced; module links stay.
+      db.userProduct.deleteMany({ where: { userId: id, product: { parentId: null } } }),
+      db.userProduct.createMany({ data: productIds.map((productId) => ({ userId: id, productId })), skipDuplicates: true }),
     ]);
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, message: "И-мэйл эсвэл регистрийн дугаар өөр хэрэглэгчид бүртгэлтэй байна." };
@@ -153,7 +170,7 @@ export async function updateUser(_prev: FormState, formData: FormData): Promise<
 
   if (confirmed && !user.adminConfirmed) {
     // Same message the old /emails endpoint sent on approval.
-    await sendMail({
+    const sent = await sendMail({
       to: email,
       subject: "Таны бүртгэл баталгаажлаа · InfoSystems",
       content: {
@@ -163,6 +180,10 @@ export async function updateUser(_prev: FormState, formData: FormData): Promise<
         button: { label: "Нэвтрэх", url: `${SITE_URL}/portal/login` },
       },
     });
+    if (!sent) {
+      refresh();
+      return { ok: true, message: "Хадгалагдлаа. Гэхдээ баталгаажсан тухай мэйл илгээгдсэнгүй: харилцагчид өөрөө мэдэгдэнэ үү." };
+    }
   }
   refresh();
   return { ok: true, message: "Хадгалагдлаа." };
@@ -187,11 +208,16 @@ const CONTACTS_PAGE = 20;
 /** One page of contact requests, newest first; pass the last row's id as `cursor` for the next page. */
 export async function loadContacts(filter: string, cursor?: string) {
   await requireStaff();
+  // Keyset paging: «older than the last row shown». A Prisma cursor + skip:1 would skip a real row
+  // when the last row no longer matches the filter (e.g. it was just marked seen under «new»).
+  const last = cursor ? await db.contactRequest.findUnique({ where: { id: cursor }, select: { id: true, createdAt: true } }) : null;
   const rows = await db.contactRequest.findMany({
-    where: filter === "new" ? { seen: false } : undefined,
+    where: {
+      ...(filter === "new" ? { seen: false } : {}),
+      ...(last ? { OR: [{ createdAt: { lt: last.createdAt } }, { createdAt: last.createdAt, id: { lt: last.id } }] } : {}),
+    },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: CONTACTS_PAGE + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
   const hasMore = rows.length > CONTACTS_PAGE;
   return { rows: hasMore ? rows.slice(0, CONTACTS_PAGE) : rows, hasMore };
@@ -272,6 +298,8 @@ export async function saveProduct(_prev: FormState, formData: FormData): Promise
         await db.file.update({ where: { id: file.id }, data: { width: dim("Width"), height: dim("Height") } });
         pictures[key] = file.id;
       } catch (e) {
+        // Don't keep the pictures already uploaded by this failed save.
+        await releaseUploads(Object.values(pictures));
         if (e instanceof UploadError) return { ok: false, message: e.message, errors: { [field]: e.message } };
         throw e;
       }
@@ -283,7 +311,8 @@ export async function saveProduct(_prev: FormState, formData: FormData): Promise
     title: d.title || d.name,
     slug,
     tagline: d.tagline || null,
-    icon: d.icon || null,
+    // The module form has no icon picker: keep the stored icon unless the field was sent.
+    ...(formData.has("icon") ? { icon: d.icon || null } : {}),
     badge: d.badge || null,
     videoUrl: d.videoUrl || null,
     // "MACS, MACSPOS" → {MACS,MACSPOS}: version_infos.productname values.
@@ -307,10 +336,21 @@ export async function saveProduct(_prev: FormState, formData: FormData): Promise
   // Only one main product (also enforced by products_single_main_key): the previous one
   // becomes a featured card.
   const demoted = data.group === "main" ? await db.product.findFirst({ where: { group: "main", ...(id ? { NOT: { id } } : {}) }, select: { name: true } }) : null;
-  const saved = await db.$transaction(async (tx) => {
-    if (demoted) await tx.product.updateMany({ where: { group: "main", ...(id ? { NOT: { id } } : {}) }, data: { group: "featured" } });
-    return id ? tx.product.update({ where: { id }, data, select: { id: true } }) : tx.product.create({ data, select: { id: true } });
-  });
+  const before = id ? await db.product.findUnique({ where: { id }, select: { imageId: true, logoId: true, backgroundId: true } }) : null;
+  let saved;
+  try {
+    saved = await db.$transaction(async (tx) => {
+      if (demoted) await tx.product.updateMany({ where: { group: "main", ...(id ? { NOT: { id } } : {}) }, data: { group: "featured" } });
+      return id ? tx.product.update({ where: { id }, data, select: { id: true } }) : tx.product.create({ data, select: { id: true } });
+    });
+  } catch (e) {
+    await releaseUploads(Object.values(pictures));
+    // Two saves racing for the same slug (or a second «main» product): the checks above passed for both.
+    if (isUniqueViolation(e)) return { ok: false, message: "Давхардсан утга байна (slug эсвэл үндсэн бүтээгдэхүүн). Дахин хадгална уу.", errors: { slug: "Давхардсан байж магадгүй" } };
+    throw e;
+  }
+  // Pictures this save replaced or removed.
+  if (before) await releaseUploads((Object.keys(pictures) as (keyof typeof pictures)[]).map((k) => (before[k] !== pictures[k] ? before[k] : null)));
   productsChanged();
   if (!id) redirect(`/admin/products/${saved.id}?saved=1`);
   refresh();
@@ -321,7 +361,8 @@ export async function deleteProduct(id: string) {
   await requireStaff();
   if (await db.product.count({ where: { parentId: id } })) throw new Error("Эхлээд модулиудыг устгана уу.");
   // Customer links and page blocks are removed with it; issues keep their history with no product.
-  await db.product.delete({ where: { id } });
+  const gone = await db.product.delete({ where: { id }, select: { imageId: true, logoId: true, backgroundId: true } });
+  await releaseUploads([gone.imageId, gone.logoId, gone.backgroundId]);
   productsChanged();
   redirect("/admin/products");
 }
@@ -368,7 +409,7 @@ export async function saveProductBlock(_prev: FormState, formData: FormData): Pr
   if (b.kind !== "text" && !items.length) return { ok: false, message: "Дор хаяж нэг мөр нэмнэ үү." };
   const badHref = items.find((it) => it.href && !/^(\/(?!\/)|https?:\/\/)/.test(it.href));
   if (badHref) return { ok: false, message: `«${badHref.title}»: холбоос / эсвэл https:// -ээр эхэлнэ.` };
-  if (b.kind === "text" && !b.body?.replace(/<[^>]+>/g, "").trim()) return { ok: false, message: "Текст оруулна уу.", errors: { body: "Хоосон байна" } };
+  if (b.kind === "text" && !b.body?.replace(/<[^>]+>/g, "").trim() && !/<img\b/i.test(b.body ?? "")) return { ok: false, message: "Текст оруулна уу.", errors: { body: "Хоосон байна" } };
 
   const data = {
     kind: b.kind,
@@ -484,11 +525,14 @@ export async function saveNotification(_prev: FormState, formData: FormData): Pr
     fileUrl: d.fileUrl || null,
     customerId: d.customerId?.replace(/\s+/g, "") || null,
     isActive: formData.get("isActive") === "on" ? 1 : 0,
-    publishedAt: new Date(),
   };
-  if (id) await db.insertNotification.update({ where: { id }, data });
-  else {
-    await db.insertNotification.create({ data });
+  if (id) {
+    const prev = await db.insertNotification.findUnique({ where: { id }, select: { fileUrl: true } });
+    // Edits keep the original publish date (the desktop apps read it as published_at).
+    await db.insertNotification.update({ where: { id }, data });
+    if (prev?.fileUrl && prev.fileUrl !== data.fileUrl) await releaseNotificationPdf(prev.fileUrl);
+  } else {
+    await db.insertNotification.create({ data: { ...data, publishedAt: new Date() } });
     redirect("/admin/notifications");
   }
   refresh();
@@ -497,8 +541,16 @@ export async function saveNotification(_prev: FormState, formData: FormData): Pr
 
 export async function deleteNotification(id: string) {
   await requireStaff();
-  await db.insertNotification.delete({ where: { id } });
+  const { fileUrl } = await db.insertNotification.delete({ where: { id }, select: { fileUrl: true } });
+  if (fileUrl) await releaseNotificationPdf(fileUrl);
   redirect("/admin/notifications");
+}
+
+/** Notifications keep their PDF by URL, not by file id: free it once no notification links to it. */
+async function releaseNotificationPdf(url: string) {
+  if (await db.insertNotification.count({ where: { fileUrl: url } })) return;
+  const files = await db.file.findMany({ where: { url }, select: { id: true } });
+  await releaseUploads(files.map((f) => f.id));
 }
 
 // ---------------- Version history ----------------

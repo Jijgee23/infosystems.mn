@@ -12,6 +12,13 @@ export async function getUserProducts(userId: string) {
   return rows.map((r) => r.product);
 }
 
+/**
+ * «Not written by `userId`», including rows whose author was deleted (user_id NULL): Prisma's
+ * `NOT: { userId }` becomes SQL `NOT (user_id = $1)`, which is never true for NULL.
+ * Wrapped in AND so it can sit next to a search filter's own OR.
+ */
+const notBy = (userId: string) => ({ AND: [{ OR: [{ userId: null }, { userId: { not: userId } }] }] });
+
 /** Title / text search (case-insensitive) for issue lists. */
 function matching(q: string | undefined): Prisma.ProductIssueWhereInput {
   const needle = q?.trim().slice(0, 100);
@@ -34,7 +41,7 @@ export async function listIssues(opts: { userId?: string; viewerId: string; reso
       updatedAt: true,
       product: { select: { title: true } },
       user: { select: { companyName: true } },
-      _count: { select: { answers: { where: { seen: false, NOT: { userId: opts.viewerId } } } } },
+      _count: { select: { answers: { where: { seen: false, ...notBy(opts.viewerId) } } } },
     },
   });
   return issues.map(({ product, user, _count, ...i }) => ({ ...i, product: product?.title ?? null, companyName: user?.companyName ?? null, unread: _count.answers }));
@@ -48,7 +55,7 @@ export async function listSharedIssues(opts: { userId: string; q?: string; limit
   const issues = await db.productIssue.findMany({
     where: {
       adminConfirmed: true,
-      NOT: { userId: opts.userId },
+      ...notBy(opts.userId),
       product: { users: { some: { userId: opts.userId } } },
       ...matching(opts.q),
     },
@@ -98,6 +105,6 @@ export async function getIssue(id: string | null, viewer: SessionUser) {
 
 /** Marks the other party's answers (and, for staff, the issue itself) as seen. */
 export async function markIssueSeen(id: string, viewer: SessionUser) {
-  await db.issueAnswer.updateMany({ where: { issueId: id, seen: false, NOT: { userId: viewer.id } }, data: { seen: true } });
+  await db.issueAnswer.updateMany({ where: { issueId: id, seen: false, ...notBy(viewer.id) }, data: { seen: true } });
   if (viewer.role !== "customer") await db.productIssue.updateMany({ where: { id, seen: false }, data: { seen: true } });
 }

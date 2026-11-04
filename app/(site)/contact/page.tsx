@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ContactForm } from "@/components/site/contact-form";
+import { Suspense } from "react";
+import { ContactForm, ContactFormFromQuery } from "@/components/site/contact-form";
 import { MapEmbed } from "@/components/site/map-embed";
 import { Mail, MapPin, Phone } from "@/components/site/icons";
 import { formatPhone, getCompany, mapEmbedUrl, telHref } from "@/lib/data/company";
@@ -41,7 +42,9 @@ export default async function ContactPage() {
       <section className="py-12 sm:py-16">
         <div className="mx-auto w-full px-4 sm:px-6 lg:px-8 max-w-7xl grid gap-10 lg:grid-cols-12">
           <div className="lg:col-span-7">
-            <ContactForm />
+            <Suspense fallback={<ContactForm />}>
+              <ContactFormFromQuery />
+            </Suspense>
           </div>
           <aside className="lg:col-span-5">
             <div className="space-y-4 lg:sticky lg:top-24">
