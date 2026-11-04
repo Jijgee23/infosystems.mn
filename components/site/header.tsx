@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
+import { Suspense, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { NavProduct } from "@/lib/data/products";
 import { MAIN_NAV } from "@/lib/site";
 import { ArrowRight, ChevronDown, Logo, Menu, X } from "./icons";
@@ -30,8 +30,11 @@ function ActiveNavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-/** Site header. `products` comes from the DB (getProductNav) via the site layout. */
-export function Header({ products }: { products: NavProduct[] }) {
+/**
+ * Site header. `products` comes from the DB (getProductNav) via the site layout; `account` and
+ * `mobileAccount` are the signed-in user's slots (HeaderAccountSlot), rendered on the server.
+ */
+export function Header({ products, account, mobileAccount }: { products: NavProduct[]; account: ReactNode; mobileAccount: ReactNode }) {
   const main = products.filter((p) => p.group === "main");
   const featured = products.filter((p) => p.group === "featured");
   const other = products.filter((p) => p.group === "other");
@@ -152,9 +155,7 @@ export function Header({ products }: { products: NavProduct[] }) {
           </nav>
           <div className="flex items-center gap-1 sm:gap-2">
             <ThemeToggle />
-            <Link className="hidden h-10 items-center rounded-full px-3 text-sm font-medium text-fg-muted transition-colors hover:bg-surface hover:text-fg md:inline-flex" href="/portal">
-              Нэвтрэх
-            </Link>
+            {account}
             <span className="hidden sm:block">
               <Link className={cn(PRIMARY_BTN, "h-10 px-4 text-sm")} href="/contact">
                 {/* Short label where the full menu leaves little room (lg up to xl). */}
@@ -294,11 +295,7 @@ export function Header({ products }: { products: NavProduct[] }) {
                 </Link>
               </li>
             ))}
-            <li>
-              <Link className="block py-4 font-display text-lg font-semibold text-fg" href="/portal">
-                Харилцагчийн булан
-              </Link>
-            </li>
+            {mobileAccount}
           </ul>
           <Link className={cn(PRIMARY_BTN, "h-12 px-6 text-base mt-6 w-full")} href="/contact">
             Демо захиалах

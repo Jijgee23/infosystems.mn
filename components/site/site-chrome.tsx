@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Footer, StickyBar } from "@/components/site/footer";
 import { Header } from "@/components/site/header";
+import { HeaderAccountSlot } from "@/components/site/header-account";
 import { SiteEffects } from "@/components/site/site-effects";
 import { getCompany, telHref } from "@/lib/data/company";
 import { getProductNav } from "@/lib/data/products";
@@ -30,7 +31,7 @@ export async function SiteChrome({ children }: { children: ReactNode }) {
       <a className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:rounded-full focus:bg-brand focus:px-4 focus:py-2 focus:text-white" href="#main">
         Үндсэн агуулга руу шилжих
       </a>
-      <Header products={products} />
+      <Header account={<HeaderAccountSlot variant="desktop" />} mobileAccount={<HeaderAccountSlot variant="mobile" />} products={products} />
       {children}
       <Footer />
       <StickyBar />
