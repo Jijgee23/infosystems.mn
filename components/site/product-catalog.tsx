@@ -93,34 +93,42 @@ export async function ProductCatalog() {
 
       {other.length > 0 && (
         <section className="border-t border-line bg-surface py-14 sm:py-16">
-          <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-12 lg:px-8">
-            <div className="lg:col-span-4">
-              <h2 className="text-3xl font-bold text-fg">Бусад систем</h2>
-              <p className="mt-3 text-fg-muted">Тодорхой салбар, үйл ажиллагаанд зориулсан системүүд.</p>
-            </div>
-            <ul className="divide-y divide-line rounded-3xl border border-line bg-card lg:col-span-8">
-              {other.map((p) => (
-                <li key={p.id}>
-                  <Link className="group flex items-start gap-4 p-5 transition-colors hover:bg-surface/60 sm:p-6" href={`/products/${p.slug}`}>
-                    <span
+          <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+            <h2 className="text-3xl font-bold text-fg">Бусад систем</h2>
+            <p className="mt-3 text-fg-muted">Тодорхой салбар, үйл ажиллагаанд зориулсан системүүд.</p>
+            {/* Card grid: 1 column on phones, 2 on tablets, 3 on desktop. */}
+            <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {other.map((p, i) => {
+                const soon = p.status === "coming_soon";
+                return (
+                  <li className="reveal" key={p.id} style={{ "--reveal-delay": `${Math.min(i, 5) * 60}ms` }}>
+                    <Link
                       className={cn(
-                        "inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl",
-                        p.logoUrl ? "border border-line bg-white p-1" : "bg-surface text-fg-muted group-hover:bg-brand-soft group-hover:text-brand",
+                        "group flex h-full flex-col rounded-3xl border bg-card p-6 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-ink/5",
+                        soon ? "border-dashed border-line" : "border-line hover:border-brand/30",
                       )}
+                      href={`/products/${p.slug}`}
                     >
-                      <ProductMark className="h-5 w-5" icon={p.icon} logoUrl={p.logoUrl} name={p.name} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2 font-display text-lg font-bold text-fg group-hover:text-brand">
-                        {p.name}
-                        {p.status === "coming_soon" && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent-ink">Тун удахгүй</span>}
+                      <span className="flex items-center gap-3">
+                        <span
+                          className={cn(
+                            "inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl",
+                            p.logoUrl ? "border border-line bg-white p-1" : "bg-surface text-fg-muted group-hover:bg-brand-soft group-hover:text-brand",
+                          )}
+                        >
+                          <ProductMark className="h-5 w-5" icon={p.icon} logoUrl={p.logoUrl} name={p.name} />
+                        </span>
+                        <span className="min-w-0 font-display text-lg font-bold text-fg group-hover:text-brand">{p.name}</span>
+                        {soon && <span className="ml-auto shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent-ink">Тун удахгүй</span>}
                       </span>
-                      {p.tagline && <span className="mt-0.5 line-clamp-2 block text-sm text-fg-muted">{p.tagline}</span>}
-                    </span>
-                    <ArrowRight className="mt-2 h-5 w-5 shrink-0 text-fg-subtle transition-all group-hover:translate-x-1 group-hover:text-brand" />
-                  </Link>
-                </li>
-              ))}
+                      {p.tagline && <span className="mt-3 line-clamp-3 text-sm leading-relaxed text-fg-muted">{p.tagline}</span>}
+                      <span className="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-semibold text-brand transition-all group-hover:gap-2.5">
+                        {soon ? "Нээлтийн мэдээ авах" : "Дэлгэрэнгүй"} <ArrowRight className="h-4 w-4" />
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </section>
