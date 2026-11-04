@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Logo, Menu, X } from "@/components/site/icons";
 import { ThemeToggle } from "@/components/site/theme-toggle";
 import { staffLogout } from "@/lib/actions/auth";
@@ -64,15 +64,51 @@ const GROUPS: Group[] = [
 
 export type NavCounts = Partial<Record<NonNullable<Item["badge"]>, number>>;
 
-/** Admin side navigation: fixed sidebar on desktop, slide-in drawer on mobile. */
-export function AdminSidebar({ userName, role, counts }: { userName: string; role: "admin" | "employee"; counts: NavCounts }) {
+/** Cookie holding the desktop sidebar state; the panel layout reads it so the first paint matches. */
+export const SIDEBAR_COOKIE = "admin-sidebar";
+
+const Chevrons = ({ left }: { left: boolean }) => (
+  <svg aria-hidden="true" className="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" viewBox="0 0 24 24">
+    <path d={left ? "m11 17-5-5 5-5" : "m13 17 5-5-5-5"} />
+    <path d={left ? "m18 17-5-5 5-5" : "m6 17 5-5-5-5"} />
+  </svg>
+);
+
+const roleLabel = (role: "admin" | "employee") => (role === "admin" ? "Админ" : "Ажилтан");
+
+/**
+ * Admin shell: on desktop a fixed sidebar that expands / collapses to an icon rail
+ * (toggle button or Ctrl/⌘+B, remembered in a cookie); on mobile a slide-in drawer.
+ * Renders <main> too, since its left offset follows the sidebar width.
+ */
+export function AdminSidebar({
+  userName,
+  role,
+  counts,
+  defaultCollapsed = false,
+  children,
+}: {
+  userName: string;
+  role: "admin" | "employee";
+  counts: NavCounts;
+  defaultCollapsed?: boolean;
+  children: ReactNode;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [lastPath, setLastPath] = useState(pathname);
   if (lastPath !== pathname) {
     setLastPath(pathname);
     setOpen(false);
   }
+
+  const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
+
+  useEffect(() => {
+    document.cookie = `${SIDEBAR_COOKIE}=${collapsed ? "collapsed" : "expanded"}; path=/admin; max-age=31536000; samesite=lax`;
+  }, [collapsed]);
+
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -80,27 +116,54 @@ export function AdminSidebar({ userName, role, counts }: { userName: string; rol
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "b") return;
+      // Leave Ctrl+B to form fields and the rich-text editor (bold).
+      if ((e.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable]")) return;
+      e.preventDefault();
+      toggleCollapsed();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [toggleCollapsed]);
+
   const groups = GROUPS.filter((g) => role === "admin" || !g.adminOnly);
 
-  const nav = (
-    <nav aria-label="Админ цэс" className="flex-1 overflow-y-auto px-3 py-4">
-      {groups.map((g) => (
+  // `rail` = collapsed desktop rendering; the mobile drawer is always expanded.
+  const renderNav = (rail: boolean) => (
+    <nav aria-label="Админ цэс" className={`flex-1 overflow-x-hidden overflow-y-auto py-4 ${rail ? "px-2" : "px-3"}`}>
+      {groups.map((g, gi) => (
         <div className="mb-5" key={g.title || "main"}>
-          {g.title && <p className="mb-1.5 px-3 text-[11px] font-semibold tracking-wider text-fg-subtle uppercase">{g.title}</p>}
+          {g.title &&
+            (rail ? (
+              gi > 0 && <div aria-hidden="true" className="mx-3 mb-3 border-t border-line" />
+            ) : (
+              <p className="mb-1.5 truncate px-3 text-[11px] font-semibold tracking-wider whitespace-nowrap text-fg-subtle uppercase">{g.title}</p>
+            ))}
           <ul className="space-y-0.5">
             {g.items.map((item) => {
               const active = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const n = item.badge ? counts[item.badge] : 0;
+              const n = item.badge ? (counts[item.badge] ?? 0) : 0;
+              const count = n > 99 ? "99+" : String(n);
               return (
                 <li key={item.href}>
                   <Link
                     aria-current={active ? "page" : undefined}
-                    className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface hover:text-fg aria-[current=page]:bg-brand-soft aria-[current=page]:text-brand"
+                    aria-label={rail ? (n ? `${item.label} (${count})` : item.label) : undefined}
+                    className={`relative flex items-center gap-3 rounded-xl py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface hover:text-fg aria-[current=page]:bg-brand-soft aria-[current=page]:text-brand ${rail ? "justify-center" : "px-3"}`}
                     href={item.href}
+                    title={rail ? item.label : undefined}
                   >
                     {item.icon}
-                    <span className="flex-1 truncate">{item.label}</span>
-                    {!!n && <span className="min-w-5 rounded-full bg-brand px-1.5 text-center text-[11px] leading-5 font-bold text-white tabular-nums dark:text-ink">{n > 99 ? "99+" : n}</span>}
+                    {rail ? (
+                      n > 0 && <span aria-hidden="true" className="absolute top-1.5 right-3 h-2 w-2 rounded-full bg-brand ring-2 ring-bg" />
+                    ) : (
+                      <>
+                        <span className="flex-1 truncate whitespace-nowrap">{item.label}</span>
+                        {n > 0 && <span className="min-w-5 rounded-full bg-brand px-1.5 text-center text-[11px] leading-5 font-bold text-white tabular-nums dark:text-ink">{count}</span>}
+                      </>
+                    )}
                   </Link>
                 </li>
               );
@@ -111,48 +174,87 @@ export function AdminSidebar({ userName, role, counts }: { userName: string; rol
     </nav>
   );
 
-  const footer = (
-    <div className="border-t border-line p-3">
-      <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft font-display font-bold text-brand">{userName.slice(0, 1).toUpperCase()}</span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-fg">{userName}</span>
-          <span className="block text-xs text-fg-subtle">{role === "admin" ? "Админ" : "Ажилтан"}</span>
-        </span>
+  const avatar = (
+    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft font-display font-bold text-brand" title={`${userName} · ${roleLabel(role)}`}>
+      {userName.slice(0, 1).toUpperCase()}
+    </span>
+  );
+
+  const iconButton = "inline-flex h-10 w-10 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface";
+
+  const renderFooter = (rail: boolean) =>
+    rail ? (
+      <div className="flex flex-col items-center gap-1 border-t border-line p-2">
+        {avatar}
         <ThemeToggle />
-      </div>
-      <div className="mt-1 flex gap-1">
-        <Link className="flex-1 rounded-xl px-3 py-2 text-center text-sm font-medium text-fg-muted hover:bg-surface hover:text-fg" href="/" target="_blank">
-          Сайт харах ↗
+        <Link aria-label="Сайт харах" className={`${iconButton} hover:text-fg`} href="/" target="_blank" title="Сайт харах">
+          <I d={["M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"]} />
         </Link>
-        <form action={staffLogout} className="flex-1">
-          <button className="w-full rounded-xl px-3 py-2 text-sm font-medium text-fg-muted hover:bg-surface hover:text-red-600" type="submit">
-            Гарах
+        <form action={staffLogout}>
+          <button aria-label="Гарах" className={`${iconButton} hover:text-red-600`} title="Гарах" type="submit">
+            <I d={["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "m16 17 5-5-5-5", "M21 12H9"]} />
           </button>
         </form>
       </div>
-    </div>
+    ) : (
+      <div className="border-t border-line p-3">
+        <div className="flex items-center gap-3 rounded-xl px-2 py-2">
+          {avatar}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-fg">{userName}</span>
+            <span className="block text-xs text-fg-subtle">{roleLabel(role)}</span>
+          </span>
+          <ThemeToggle />
+        </div>
+        <div className="mt-1 flex gap-1">
+          <Link className="flex-1 rounded-xl px-3 py-2 text-center text-sm font-medium whitespace-nowrap text-fg-muted hover:bg-surface hover:text-fg" href="/" target="_blank">
+            Сайт харах ↗
+          </Link>
+          <form action={staffLogout} className="flex-1">
+            <button className="w-full rounded-xl px-3 py-2 text-sm font-medium text-fg-muted hover:bg-surface hover:text-red-600" type="submit">
+              Гарах
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+
+  const brand = (iconOnly = false) => (
+    <Link aria-label={iconOnly ? "Хянах самбар" : undefined} className="flex items-center gap-2.5" href="/admin">
+      <Logo iconOnly={iconOnly} />
+      {!iconOnly && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">Админ</span>}
+    </Link>
   );
 
-  const brand = (
-    <Link className="flex items-center gap-2.5" href="/admin">
-      <Logo />
-      <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">Админ</span>
-    </Link>
+  const toggleLabel = collapsed ? "Цэсийг дэлгэх (Ctrl+B)" : "Цэсийг хураах (Ctrl+B)";
+  const toggleButton = (
+    <button aria-expanded={!collapsed} aria-label={toggleLabel} className={`${iconButton} h-9 w-9 shrink-0 hover:text-fg`} onClick={toggleCollapsed} title={toggleLabel} type="button">
+      <Chevrons left={!collapsed} />
+    </button>
   );
 
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-line bg-bg lg:flex">
-        <div className="flex h-16 items-center border-b border-line px-5">{brand}</div>
-        {nav}
-        {footer}
+      <aside className={`fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-line bg-bg transition-[width] duration-200 ease-out motion-reduce:transition-none lg:flex ${collapsed ? "w-[72px]" : "w-64"}`}>
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-2 border-b border-line py-3.5">
+            {brand(true)}
+            {toggleButton}
+          </div>
+        ) : (
+          <div className="flex h-16 items-center justify-between gap-2 border-b border-line pr-3 pl-5">
+            {brand()}
+            {toggleButton}
+          </div>
+        )}
+        {renderNav(collapsed)}
+        {renderFooter(collapsed)}
       </aside>
 
       {/* Mobile top bar */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-bg/90 px-4 backdrop-blur-xl lg:hidden">
-        {brand}
+        {brand()}
         <button aria-expanded={open} aria-label="Цэс" className="inline-flex h-10 w-10 items-center justify-center rounded-full text-fg hover:bg-surface" onClick={() => setOpen(true)} type="button">
           <Menu className="h-5 w-5" />
         </button>
@@ -163,15 +265,20 @@ export function AdminSidebar({ userName, role, counts }: { userName: string; rol
         <div className={`absolute inset-0 bg-ink/40 transition-opacity ${open ? "opacity-100" : "opacity-0"}`} onClick={() => setOpen(false)} />
         <aside className={`absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-bg shadow-2xl transition-transform duration-200 ${open ? "translate-x-0" : "-translate-x-full"}`}>
           <div className="flex h-14 items-center justify-between border-b border-line px-4">
-            {brand}
+            {brand()}
             <button aria-label="Хаах" className="inline-flex h-10 w-10 items-center justify-center rounded-full text-fg hover:bg-surface" onClick={() => setOpen(false)} type="button">
               <X className="h-5 w-5" />
             </button>
           </div>
-          {nav}
-          {footer}
+          {renderNav(false)}
+          {renderFooter(false)}
         </aside>
       </div>
+
+      <main className={`min-w-0 px-4 py-6 transition-[margin] duration-200 ease-out motion-reduce:transition-none sm:px-6 lg:px-10 lg:py-9 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`} id="main">
+        {/* Capped so lists and forms stay readable on wide screens. */}
+        <div className="mx-auto max-w-6xl">{children}</div>
+      </main>
     </>
   );
 }

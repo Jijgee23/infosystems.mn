@@ -1,5 +1,6 @@
+import { cookies } from "next/headers";
 import { Suspense } from "react";
-import { AdminSidebar } from "@/components/admin/admin-nav";
+import { AdminSidebar, SIDEBAR_COOKIE } from "@/components/admin/admin-nav";
 import { SiteEffects } from "@/components/site/site-effects";
 import { requireStaff } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -25,14 +26,12 @@ async function AdminShell({ children }: { children: React.ReactNode }) {
     db.productIssue.count({ where: { seen: false } }),
     db.user.count({ where: { adminConfirmed: false, blocked: false } }),
   ]);
+  const collapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "collapsed";
+  // The sidebar also renders <main>, since its left offset follows the expanded/collapsed state.
   return (
-    <>
-      <AdminSidebar counts={{ contacts, issues, users }} role={user.role === "admin" ? "admin" : "employee"} userName={user.username} />
-      <main className="min-w-0 px-4 py-6 sm:px-6 lg:ml-64 lg:px-10 lg:py-9" id="main">
-        {/* Capped so lists and forms stay readable on wide screens. */}
-        <div className="mx-auto max-w-6xl">{children}</div>
-      </main>
-    </>
+    <AdminSidebar counts={{ contacts, issues, users }} defaultCollapsed={collapsed} role={user.role === "admin" ? "admin" : "employee"} userName={user.username}>
+      {children}
+    </AdminSidebar>
   );
 }
 

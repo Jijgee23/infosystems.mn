@@ -88,7 +88,7 @@ export const Moon = (p: IconProps) => (
   </Lucide>
 );
 
-export function Logo() {
+export function Logo({ iconOnly = false }: { iconOnly?: boolean } = {}) {
   return (
     <span className="inline-flex items-center gap-2.5">
       <svg aria-hidden="true" className="h-9 w-9" viewBox="0 0 40 40">
@@ -97,7 +97,7 @@ export function Logo() {
         <rect fill="#fff" height="13.4" rx="2.5" width="5" x="10.5" y="16.6" />
         <path d="M29.6 15.6c-.9-2.2-2.9-3.5-5.3-3.5-2.9 0-4.9 1.8-4.9 4.1 0 5.4 10.6 3 10.6 8.9 0 2.6-2.2 4.6-5.4 4.6-2.6 0-4.6-1.2-5.6-3.4" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4.4" />
       </svg>
-      <span className="flex flex-col leading-none">
+      <span className={iconOnly ? "sr-only" : "flex flex-col leading-none"}>
         <span className="font-display text-[17px] font-extrabold tracking-tight text-fg">InfoSystems</span>
         <span className="mt-0.5 text-[10px] font-semibold tracking-[0.22em] text-fg-muted uppercase">Mongolia</span>
       </span>
