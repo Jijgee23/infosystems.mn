@@ -12,6 +12,7 @@ import { escapeHtml, sendMail } from "@/lib/mail";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { SITE_URL, SOLUTIONS } from "@/lib/site";
 import { POST_CATEGORIES, type PostCategory } from "@/lib/post-categories";
+import { linkUrlError, PRODUCT_LINK_KINDS, type ProductLinkKind } from "@/lib/product-links";
 import { slugify } from "@/lib/slug";
 import { videoEmbedUrl } from "@/lib/video";
 import { PRODUCTS_TAG } from "@/lib/data/products";
@@ -365,6 +366,44 @@ export async function deleteProduct(id: string) {
   await releaseUploads([gone.imageId, gone.logoId, gone.backgroundId]);
   productsChanged();
   redirect("/admin/products");
+}
+
+// ---------------- Product links (website, app stores, ...) ----------------
+
+const ProductLinkSchema = z.object({
+  kind: z.enum(PRODUCT_LINK_KINDS.map((k) => k.key) as [ProductLinkKind, ...ProductLinkKind[]]),
+  label: z.string().trim().max(80).optional(),
+  url: z.string().trim().min(1, "Холбоос оруулна уу").max(500),
+  sortOrder: z.coerce.number().int().min(0).max(999).default(0),
+});
+
+/** Adds (no `id`) or updates one link of a product; `productId` is bound by the page. */
+export async function saveProductLink(productId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  await requireStaff();
+  const id = idParam(formData.get("id"));
+  const parsed = ProductLinkSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: "Талбаруудаа шалгана уу.", errors: errorsOf(parsed.error) };
+  const d = parsed.data;
+  const urlError = linkUrlError(d.kind, d.url);
+  if (urlError) return { ok: false, message: urlError, errors: { url: urlError } };
+  if (!(await db.product.findUnique({ where: { id: productId }, select: { id: true } }))) return { ok: false, message: "Бүтээгдэхүүн олдсонгүй." };
+
+  const data = { kind: d.kind, label: d.label || null, url: d.url, sortOrder: d.sortOrder };
+  if (id) {
+    // Scoped to the product, so a link id from another product's page can't be edited here.
+    const { count } = await db.productLink.updateMany({ where: { id, productId }, data });
+    if (!count) return { ok: false, message: "Холбоос олдсонгүй." };
+  } else await db.productLink.create({ data: { ...data, productId } });
+  productsChanged();
+  refresh();
+  return { ok: true, message: id ? "Хадгалагдлаа." : "Холбоос нэмэгдлээ." };
+}
+
+export async function deleteProductLink(id: string) {
+  await requireStaff();
+  await db.productLink.deleteMany({ where: { id } });
+  productsChanged();
+  refresh();
 }
 
 // ---------------- Product page blocks ----------------

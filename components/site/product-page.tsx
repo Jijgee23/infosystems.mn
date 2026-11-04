@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Breadcrumbs } from "@/components/site/breadcrumbs";
-import { ArrowRight, Mail, Phone } from "@/components/site/icons";
+import { ArrowRight, Download, ExternalLink, Globe, Mail, Phone, Smartphone } from "@/components/site/icons";
 import { NotifyForm } from "@/components/site/notify-form";
 import { ProductSolutions, ProductUpdates } from "@/components/site/product-extras";
 import { CaseStudies, Testimonials } from "@/components/site/trust";
@@ -11,6 +11,7 @@ import { formatPhone, getCompany, telHref } from "@/lib/data/company";
 import { getComparison, getProductNav, type ProductPageData } from "@/lib/data/products";
 import { getUpdates } from "@/lib/data/updates";
 import { ProductMark } from "@/lib/product-icons";
+import { linkText } from "@/lib/product-links";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { videoEmbedUrl } from "@/lib/video";
 import { absUrl, JsonLd, SITE_URL } from "./json-ld";
@@ -65,7 +66,7 @@ export async function ProductView({ product: p }: { product: ProductPageData }) 
               </div>
               <h1 className="mt-5 text-4xl font-extrabold text-fg sm:text-5xl">{p.name}</h1>
               {p.tagline && <p className="mt-4 max-w-2xl text-lg leading-relaxed text-fg-muted">{p.tagline}</p>}
-              {(!comingSoon || video) && (
+              {(!comingSoon || video || p.links.length > 0) && (
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                   {!comingSoon && (
                     <Link className={cn(PRIMARY, "h-12 px-6 text-base")} href="/contact">
@@ -73,7 +74,8 @@ export async function ProductView({ product: p }: { product: ProductPageData }) 
                     </Link>
                   )}
                   {video && <VideoButton className={cn(SECONDARY, "h-12 px-6 text-base")} embedUrl={video} title={`${p.name} — танилцуулга бичлэг`} />}
-                  {!comingSoon && !video && phone && (
+                  <ProductLinkButtons links={p.links} />
+                  {!comingSoon && !video && !p.links.length && phone && (
                     <a className={cn(SECONDARY, "h-12 px-6 text-base")} href={telHref(phone.value)}>
                       <Phone className="h-4 w-4" /> {formatPhone(phone.value)}
                     </a>
@@ -147,6 +149,21 @@ export async function ProductView({ product: p }: { product: ProductPageData }) 
   );
 }
 
+const LINK_ICON = { website: Globe, app_store: Smartphone, google_play: Smartphone, windows: Download, other: ExternalLink } as const;
+
+/** The product's own website, app-store and download links (admin › Холбоосууд), opened in a new tab. */
+function ProductLinkButtons({ links }: { links: ProductPageData["links"] }) {
+  return links.map((l) => {
+    const Icon = LINK_ICON[l.kind];
+    return (
+      <a className={cn(SECONDARY, "h-12 px-6 text-base")} href={l.url} key={l.id} rel="noopener noreferrer" target="_blank">
+        <Icon className="h-4 w-4" /> {linkText(l)}
+        <span className="sr-only"> (шинэ таб дээр нээгдэнэ)</span>
+      </a>
+    );
+  });
+}
+
 /** Page of a module (/products/<parent>/<slug>). */
 export async function ModuleView({ product: p }: { product: ProductPageData }) {
   const company = await getCompany();
@@ -166,6 +183,11 @@ export async function ModuleView({ product: p }: { product: ProductPageData }) {
           <p className="mt-8 text-sm font-semibold text-brand">{parent.name} · Модулиуд</p>
           <h1 className="mt-2 text-4xl font-extrabold text-fg sm:text-5xl">{p.name}</h1>
           {p.tagline && <p className="mt-4 max-w-2xl text-lg leading-relaxed text-fg-muted">{p.tagline}</p>}
+          {p.links.length > 0 && (
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <ProductLinkButtons links={p.links} />
+            </div>
+          )}
         </div>
       </section>
       <section className="py-14 sm:py-16">

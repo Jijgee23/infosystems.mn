@@ -241,6 +241,8 @@ model Product {
   inComparison Boolean  @default(false) @map("in_comparison")
 
   blocks          ProductBlock[]
+  /// Website and app links shown on the product page («Вэб сайтад зочлох», App Store, ...).
+  links           ProductLink[]
   users           UserProduct[]
   issues          ProductIssue[]
   testimonials    Testimonial[]
@@ -260,6 +262,31 @@ enum ProductBlockKind {
   links
 
   @@map("product_block_kind")
+}
+
+/// What a product link points to; picks its icon and default label on the product page.
+enum ProductLinkKind {
+  website
+  app_store
+  google_play
+  windows
+  other
+}
+
+/// An outside link of a product: its own website, its app in a store, a desktop download, ...
+model ProductLink {
+  id        String          @id @default(cuid(2))
+  productId String          @map("product_id")
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  kind      ProductLinkKind @default(website)
+  /// Button text; empty = the kind's default («Вэб сайтад зочлох», «App Store», ...).
+  label     String?         @db.VarChar(80)
+  url       String          @db.VarChar(500)
+  sortOrder Int             @default(0) @map("sort_order")
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([productId, sortOrder])
+  @@map("product_links")
 }
 
 /// One section of a product page, in `sortOrder`.

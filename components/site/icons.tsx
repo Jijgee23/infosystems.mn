@@ -45,6 +45,21 @@ export const Download = (p: IconProps) => (
   </Lucide>
 );
 
+export const Globe = (p: IconProps) => (
+  <Lucide {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+    <path d="M2 12h20" />
+  </Lucide>
+);
+
+export const Smartphone = (p: IconProps) => (
+  <Lucide {...p}>
+    <rect height="20" rx="2" ry="2" width="14" x="5" y="2" />
+    <path d="M12 18h.01" />
+  </Lucide>
+);
+
 export const ExternalLink = (p: IconProps) => (
   <Lucide {...p}>
     <path d="M15 3h6v6" />

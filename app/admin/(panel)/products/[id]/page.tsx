@@ -10,6 +10,7 @@ import { db, toNum } from "@/lib/db";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { ProductBlocks } from "../product-blocks";
 import { ProductCustomers } from "../product-customers";
+import { ProductLinks } from "../product-links";
 import { ProductForm } from "../product-form";
 
 export const metadata = { title: "Бүтээгдэхүүн засах" };
@@ -17,6 +18,7 @@ export const metadata = { title: "Бүтээгдэхүүн засах" };
 const TABS = [
   { key: "profile", label: "Үндсэн мэдээлэл" },
   { key: "content", label: "Хуудасны агуулга" },
+  { key: "links", label: "Холбоосууд" },
   { key: "modules", label: "Модулиуд", parentOnly: true },
   { key: "customers", label: "Харилцагчид", parentOnly: true },
 ] as const;
@@ -50,6 +52,7 @@ export default async function EditProductPage({ params, searchParams }: PageProp
           parent: { select: { id: true, name: true, slug: true } },
           modules: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, slug: true, listed: true, publishedAt: true } },
           blocks: { orderBy: { sortOrder: "asc" }, include: { items: { orderBy: { sortOrder: "asc" } } } },
+          links: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
           users: { include: { user: { select: { id: true, username: true, companyName: true, companyRegister: true, email: true } } } },
           _count: { select: { issues: true } },
         },
@@ -173,6 +176,13 @@ export default async function EditProductPage({ params, searchParams }: PageProp
             productId={product.id}
           />
         </section>
+      )}
+
+      {tab === "links" && (
+        <ProductLinks
+          links={product.links.map((l) => ({ id: l.id, kind: l.kind, label: l.label ?? "", url: l.url, sortOrder: l.sortOrder }))}
+          productId={product.id}
+        />
       )}
 
       {tab === "modules" && (

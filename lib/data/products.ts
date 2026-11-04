@@ -67,6 +67,7 @@ export async function getProductPage(slug: string, parentSlug: string | null) {
       background: { select: { url: true } },
       parent: { select: { slug: true, name: true } },
       blocks: { orderBy: { sortOrder: "asc" }, include: { items: { orderBy: { sortOrder: "asc" } } } },
+      links: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, kind: true, label: true, url: true } },
       modules: {
         where: { listed: true, ...published() },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
