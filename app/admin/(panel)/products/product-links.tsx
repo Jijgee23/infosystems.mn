@@ -6,7 +6,7 @@ import { EditableItem, ItemList, ListToolbar, NewItem, useCloseOnSave } from "@/
 import { ActionForm } from "@/components/ui/action-form";
 import { Button } from "@/components/ui/form";
 import { deleteProductLink, saveProductLink } from "@/lib/actions/admin";
-import { linkBadge, linkKind, linkText, PRODUCT_LINK_KINDS, type ProductLinkKind } from "@/lib/product-links";
+import { linkKind, linkText, PRODUCT_LINK_KINDS, type ProductLinkKind } from "@/lib/product-links";
 
 const INPUT = "h-10 w-full rounded-xl border border-line bg-card px-3 text-sm text-fg focus:border-brand focus:outline-none";
 const FIELD_LABEL = "mb-1 block text-[11px] font-semibold tracking-wide text-fg-subtle uppercase";
@@ -19,7 +19,6 @@ function LinkForm({ productId, link }: { productId: string; link: ProductLinkRow
   useCloseOnSave(state);
   const [kind, setKind] = useState<ProductLinkKind>(link?.kind ?? "website");
   const k = linkKind(kind);
-  const badge = linkBadge(kind);
   const err = (name: string) => state?.errors?.[name];
   return (
     <ActionForm action={action} className="grid gap-3 sm:grid-cols-[13rem_1fr]">
@@ -39,19 +38,10 @@ function LinkForm({ productId, link }: { productId: string; link: ProductLinkRow
         <input aria-invalid={!!err("url")} autoFocus className={`${INPUT} ${err("url") ? "border-red-500" : ""}`} defaultValue={link?.url} name="url" placeholder={k.placeholder} required type="url" />
         {err("url") && <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{err("url")}</span>}
       </label>
-      {badge ? (
-        // Store links show the store's official badge, which has no editable text.
-        <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element -- small static preview in the admin */}
-          <img alt={badge.alt} className="h-10 w-auto" src={badge.src} />
-          <p className="text-xs text-fg-muted">Сайтад албан ёсны лого харагдана.</p>
-        </div>
-      ) : (
-        <label>
-          <span className={FIELD_LABEL}>Товчны бичиг (заавал биш)</span>
-          <input className={INPUT} defaultValue={link?.label} maxLength={80} name="label" placeholder={k.button} />
-        </label>
-      )}
+      <label>
+        <span className={FIELD_LABEL}>Товчны бичиг (заавал биш)</span>
+        <input className={INPUT} defaultValue={link?.label} maxLength={80} name="label" placeholder={k.button} />
+      </label>
       <div className="flex items-end gap-3">
         <label className="w-24">
           <span className={FIELD_LABEL}>Дараалал</span>

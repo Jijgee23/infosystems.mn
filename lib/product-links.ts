@@ -4,24 +4,8 @@
  */
 export const PRODUCT_LINK_KINDS = [
   { key: "website", name: "Вэб сайт", button: "Вэб сайтад зочлох", placeholder: "https://www.example.mn" },
-  {
-    key: "app_store",
-    name: "App Store (iPhone, iPad)",
-    button: "App Store",
-    placeholder: "https://apps.apple.com/…",
-    hosts: ["apps.apple.com", "itunes.apple.com"],
-    // Apple's official badge (developer.apple.com/app-store/marketing/guidelines), used unmodified.
-    badge: { src: "/badges/app-store.svg", width: 120, height: 40, alt: "App Store-оос татах" },
-  },
-  {
-    key: "google_play",
-    name: "Google Play (Android)",
-    button: "Google Play",
-    placeholder: "https://play.google.com/store/apps/details?id=…",
-    hosts: ["play.google.com"],
-    // Google's official Mongolian badge (play.google.com/intl/en_us/badges), clear space trimmed.
-    badge: { src: "/badges/google-play.png", width: 564, height: 168, alt: "Google Play-ээс авах" },
-  },
+  { key: "app_store", name: "App Store (iPhone, iPad)", button: "App Store-оос татах", placeholder: "https://apps.apple.com/…", hosts: ["apps.apple.com", "itunes.apple.com"] },
+  { key: "google_play", name: "Google Play (Android)", button: "Google Play-ээс татах", placeholder: "https://play.google.com/store/apps/details?id=…", hosts: ["play.google.com"] },
   { key: "windows", name: "Windows програм татах", button: "Windows-д татах", placeholder: "https://…" },
   { key: "other", name: "Бусад холбоос", button: "Холбоос", placeholder: "https://…" },
 ] as const;
@@ -29,12 +13,6 @@ export const PRODUCT_LINK_KINDS = [
 export type ProductLinkKind = (typeof PRODUCT_LINK_KINDS)[number]["key"];
 
 export const linkKind = (key: string) => PRODUCT_LINK_KINDS.find((k) => k.key === key) ?? PRODUCT_LINK_KINDS[PRODUCT_LINK_KINDS.length - 1];
-
-/** The store's official badge for App Store / Google Play links, shown instead of a text button. */
-export const linkBadge = (kind: string) => {
-  const k = linkKind(kind);
-  return "badge" in k ? k.badge : null;
-};
 
 /** Text of the link's button: its own label, or the kind's default. */
 export const linkText = (l: { kind: string; label: string | null }) => l.label?.trim() || linkKind(l.kind).button;

@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Breadcrumbs } from "@/components/site/breadcrumbs";
-import { ArrowRight, Download, ExternalLink, Globe, Mail, Phone, Smartphone } from "@/components/site/icons";
+import { AppleLogo, ArrowRight, Download, ExternalLink, Globe, Mail, Phone } from "@/components/site/icons";
 import { NotifyForm } from "@/components/site/notify-form";
 import { ProductSolutions, ProductUpdates } from "@/components/site/product-extras";
 import { CaseStudies, Testimonials } from "@/components/site/trust";
@@ -11,7 +11,7 @@ import { formatPhone, getCompany, telHref } from "@/lib/data/company";
 import { getComparison, getProductNav, type ProductPageData } from "@/lib/data/products";
 import { getUpdates } from "@/lib/data/updates";
 import { ProductMark } from "@/lib/product-icons";
-import { linkBadge, linkText } from "@/lib/product-links";
+import { linkText } from "@/lib/product-links";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { videoEmbedUrl } from "@/lib/video";
 import { absUrl, JsonLd, SITE_URL } from "./json-ld";
@@ -149,33 +149,24 @@ export async function ProductView({ product: p }: { product: ProductPageData }) 
   );
 }
 
-const LINK_ICON = { website: Globe, app_store: Smartphone, google_play: Smartphone, windows: Download, other: ExternalLink } as const;
+/** Google Play logo, cut from Google's official badge (colour PNG, works on light and dark). */
+const GooglePlayLogo = ({ className }: { className?: string }) => (
+  <Image alt="" aria-hidden="true" className={className} height={18} src="/badges/google-play-icon.png" unoptimized width={18} />
+);
+
+const LINK_ICON = { website: Globe, app_store: AppleLogo, google_play: GooglePlayLogo, windows: Download, other: ExternalLink } as const;
 
 /**
- * The product's own website, app-store and download links (admin › Холбоосууд), opened in a new tab.
- * App Store / Google Play links show the store's official badge, as tall as the buttons beside it.
+ * The product's own website, app-store and download links (admin › Холбоосууд): all the same
+ * button as the website one, with the store's logo for App Store / Google Play, opened in a new tab.
  */
 function ProductLinkButtons({ links }: { links: ProductPageData["links"] }) {
   return links.map((l) => {
-    const badge = linkBadge(l.kind);
-    if (badge)
-      return (
-        <a className="inline-flex h-12 shrink-0 self-start rounded-[10px] transition-opacity hover:opacity-85 sm:self-auto" href={l.url} key={l.id} rel="noopener noreferrer" target="_blank">
-          <Image
-            alt={`${badge.alt} (шинэ таб дээр нээгдэнэ)`}
-            className="h-12 w-auto"
-            height={48}
-            // SVG badge is used as-is; the PNG is small enough not to need resizing.
-            src={badge.src}
-            unoptimized
-            width={Math.round((48 * badge.width) / badge.height)}
-          />
-        </a>
-      );
     const Icon = LINK_ICON[l.kind];
+    const store = l.kind === "app_store" || l.kind === "google_play";
     return (
       <a className={cn(SECONDARY, "h-12 px-6 text-base")} href={l.url} key={l.id} rel="noopener noreferrer" target="_blank">
-        <Icon className="h-4 w-4" /> {linkText(l)}
+        <Icon className={store ? "h-[18px] w-[18px] shrink-0" : "h-4 w-4"} /> {linkText(l)}
         <span className="sr-only"> (шинэ таб дээр нээгдэнэ)</span>
       </a>
     );
