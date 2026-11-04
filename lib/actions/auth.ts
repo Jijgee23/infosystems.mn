@@ -3,6 +3,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { createSession, destroySession, isStaffRole } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -14,9 +15,24 @@ import type { FormState } from "./contact";
 const SITE_URL = process.env.SITE_URL ?? "https://infosystems.mn";
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
-/** Only allow redirects back into this site. */
-const safeNext = (next: unknown, fallback: string) =>
-  typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : fallback;
+/**
+ * Only allow redirects back into this site, under `area` (/portal or /admin).
+ * Browsers read `/\evil.com` as `//evil.com` and drop tabs/newlines, so plain prefix checks are not
+ * enough: reject backslashes and control characters, then parse and require our own origin.
+ */
+function safeNext(next: unknown, area: "/portal" | "/admin") {
+  if (typeof next !== "string" || !next.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(next)) return area;
+  try {
+    const u = new URL(next, "http://local.invalid");
+    if (u.origin !== "http://local.invalid") return area;
+    if (u.pathname !== area && !u.pathname.startsWith(`${area}/`)) return area;
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return area;
+  }
+}
+
+const lockedMessage = (minutes: number) => `Хэт олон удаа буруу оролдлоо. ${minutes} минутын дараа дахин оролдоно уу.`;
 
 // Compared against when the email is unknown, so a miss takes as long as a wrong password
 // and response timing doesn't reveal which emails are registered.
@@ -38,7 +54,7 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
       ok: false,
       code: "locked",
       values,
-      message: `Хэт олон удаа буруу оролдлоо. ${attempts.retryAfterMinutes()} минутын дараа дахин оролдоно уу.`,
+      message: lockedMessage(attempts.retryAfterMinutes()),
     };
 
   const password = String(formData.get("password") ?? "");
@@ -47,13 +63,14 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
   else if (!z.email().safeParse(email).success) errors.email = "И-мэйл хаяг буруу байна";
   if (!password) errors.password = "Нууц үгээ оруулна уу";
   if (Object.keys(errors).length) return { ok: false, message: "", errors, values };
+  // Counted before the password check; reset() below clears it on success.
+  if (!attempts.take()) return { ok: false, code: "locked", values, message: lockedMessage(attempts.retryAfterMinutes()) };
 
   const user = await db.user.findUnique({ where: { email } });
 
   const valid = await checkPassword(password, user?.passwordHash);
   // Same message for staff accounts, so this page doesn't reveal who is staff.
   if (!user || !valid || isStaffRole(user.role)) {
-    attempts.fail();
     const left = attempts.remaining();
     return {
       ok: false,
@@ -89,7 +106,7 @@ export async function staffLogin(_prev: FormState, formData: FormData): Promise<
       ok: false,
       code: "locked",
       values,
-      message: `Хэт олон удаа буруу оролдлоо. ${attempts.retryAfterMinutes()} минутын дараа дахин оролдоно уу.`,
+      message: lockedMessage(attempts.retryAfterMinutes()),
     };
 
   const password = String(formData.get("password") ?? "");
@@ -98,12 +115,13 @@ export async function staffLogin(_prev: FormState, formData: FormData): Promise<
   else if (!z.email().safeParse(email).success) errors.email = "И-мэйл хаяг буруу байна";
   if (!password) errors.password = "Нууц үгээ оруулна уу";
   if (Object.keys(errors).length) return { ok: false, message: "", errors, values };
+  // Counted before the password check; reset() below clears it on success.
+  if (!attempts.take()) return { ok: false, code: "locked", values, message: lockedMessage(attempts.retryAfterMinutes()) };
 
   const user = await db.user.findUnique({ where: { email } });
   const valid = await checkPassword(password, user?.passwordHash);
   // One message for every failure, so the form never reveals which emails are staff accounts.
   if (!user || !valid || !isStaffRole(user.role) || user.blocked || !user.adminConfirmed) {
-    attempts.fail();
     const left = attempts.remaining();
     return {
       ok: false,
@@ -118,8 +136,7 @@ export async function staffLogin(_prev: FormState, formData: FormData): Promise<
   attempts.reset();
 
   await createSession(user.id, "staff");
-  const next = safeNext(formData.get("next"), "/admin");
-  redirect(next.startsWith("/admin") ? next : "/admin");
+  redirect(safeNext(formData.get("next"), "/admin"));
 }
 
 export async function logout() {
@@ -222,17 +239,22 @@ export async function requestPasswordReset(_prev: FormState, formData: FormData)
   const done: FormState = { ok: true, message: "Хэрэв энэ и-мэйл бүртгэлтэй бол нууц үг сэргээх холбоос илгээгдлээ." };
   if (await isRateLimited("reset", 5, 60 * 60_000)) return done;
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const user = email ? await db.user.findUnique({ where: { email } }) : null;
-  if (!user || user.blocked) return done;
+  if (!email) return done;
 
-  const token = randomBytes(32).toString("base64url");
-  await db.user.update({
-    where: { id: user.id },
-    data: { resetToken: hashToken(token), resetTokenExpires: new Date(Date.now() + 60 * 60_000) },
-  });
-  const link = `${SITE_URL}/portal/reset-password?token=${token}`;
-  await sendMail({
-    to: user.email,
+  // Everything that only happens for a real account runs after the response,
+  // so response time doesn't reveal which emails are registered.
+  after(async () => {
+    const user = await db.user.findUnique({ where: { email } });
+    if (!user || user.blocked) return;
+
+    const token = randomBytes(32).toString("base64url");
+    await db.user.update({
+      where: { id: user.id },
+      data: { resetToken: hashToken(token), resetTokenExpires: new Date(Date.now() + 60 * 60_000) },
+    });
+    const link = `${SITE_URL}/portal/reset-password?token=${token}`;
+    await sendMail({
+      to: user.email,
     subject: "Нууц үг сэргээх · InfoSystems",
     content: {
       kicker: "Харилцагчийн булан",
@@ -240,7 +262,8 @@ export async function requestPasswordReset(_prev: FormState, formData: FormData)
       intro: "Сайн байна уу. Таны бүртгэлийн нууц үгийг сэргээх хүсэлт ирлээ. Доорх товчоор орж шинэ нууц үг тохируулна уу.",
       button: { label: "Нууц үг шинэчлэх", url: link },
       note: "Холбоос 1 цагийн хугацаанд хүчинтэй. Хэрэв та хүсэлт илгээгээгүй бол энэ захидлыг үл тоомсорлоно уу.",
-    },
+      },
+    });
   });
   return done;
 }
@@ -252,14 +275,13 @@ const ResetSchema = z
 export async function resetPassword(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = ResetSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
-  const user = await db.user.findFirst({
-    where: { resetToken: hashToken(parsed.data.token), resetTokenExpires: { gt: new Date() } },
-    select: { id: true },
+  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+  // One conditional write: the token is checked and consumed together, so it can only be used once
+  // even when two requests race. Blocked accounts can't finish a reset that was sent earlier.
+  const { count } = await db.user.updateMany({
+    where: { resetToken: hashToken(parsed.data.token), resetTokenExpires: { gt: new Date() }, blocked: false },
+    data: { passwordHash, resetToken: null, resetTokenExpires: null, passwordChangedAt: new Date() },
   });
-  if (!user) return { ok: false, message: "Холбоос хүчингүй эсвэл хугацаа нь дууссан байна. Дахин хүсэлт илгээнэ үү." };
-  await db.user.update({
-    where: { id: user.id },
-    data: { passwordHash: await bcrypt.hash(parsed.data.password, 10), resetToken: null, resetTokenExpires: null, passwordChangedAt: new Date() },
-  });
+  if (!count) return { ok: false, message: "Холбоос хүчингүй эсвэл хугацаа нь дууссан байна. Дахин хүсэлт илгээнэ үү." };
   return { ok: true, message: "Нууц үг шинэчлэгдлээ. Одоо нэвтэрч болно." };
 }

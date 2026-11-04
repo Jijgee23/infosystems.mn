@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { NOTIFY_TO, sendMail, workingHours } from "@/lib/mail";
@@ -35,62 +36,84 @@ const TITLE = {
   notify: "Таныг бүртгэж авлаа",
 } as const;
 
+const SAVE_FAILED = "Хүсэлтийг хадгалж чадсангүй. Түр хүлээгээд дахин оролдоно уу, эсвэл утсаар холбогдоно уу.";
+
 /**
- * One email per request, as on macs.mn: to the team inbox with the visitor in CC (their
- * confirmation, so the text addresses them) and Reply-To the visitor.
+ * Two emails per request: the full details to the team inbox (Reply-To the visitor), and a
+ * fixed-text confirmation to the visitor. The visitor's address is unverified, so the
+ * confirmation carries nothing they typed — otherwise anyone could use the form to send
+ * their own text from our domain to any inbox.
+ * Sent after the response, so a slow SMTP server never holds up the form.
  */
-async function notifyRequest(kind: keyof typeof KIND_LABEL, d: { name?: string; company?: string; phone?: string; email: string; product?: string; message?: string }) {
-  const hours = await workingHours();
-  const when = hours ? `ажлын цагаар (${hours})` : "ажлын 1 өдөрт багтаан";
-  const intro =
-    kind === "notify"
-      ? `Сайн байна уу, ${d.product ?? "бүтээгдэхүүн"}-ий нээлтийн мэдээг авахаар бүртгүүлсэнд баярлалаа. Нээгдмэгц энэ хаягаар мэдэгдэнэ.`
-      : `Сайн байна уу${d.name ? `, ${d.name}` : ""}. InfoSystems Mongolia-д хандсанд баярлалаа. Манай мэргэжилтэн ${when} тантай холбогдоно.`;
-  const who = d.company || d.name || d.email;
-  await sendMail({
-    to: NOTIFY_TO,
-    cc: d.email,
-    replyTo: d.email,
-    subject: `${KIND_LABEL[kind]} — ${who} · InfoSystems`,
-    content: {
-      kicker: KIND_LABEL[kind],
-      title: TITLE[kind],
-      intro,
-      sectionTitle: "Таны илгээсэн мэдээлэл",
-      fields: [
-        { label: "Нэр", value: d.name },
-        { label: "Байгууллага", value: d.company },
-        { label: "Утас", value: d.phone },
-        { label: "И-мэйл", value: d.email },
-        { label: "Бүтээгдэхүүн", value: d.product },
-      ],
-      message: { label: "Мессеж", value: d.message },
-    },
+function notifyRequest(kind: keyof typeof KIND_LABEL, d: { name?: string; company?: string; phone?: string; email: string; product?: string; message?: string }) {
+  after(async () => {
+    const who = d.company || d.name || d.email;
+    await sendMail({
+      to: NOTIFY_TO,
+      replyTo: d.email,
+      subject: `${KIND_LABEL[kind]} — ${who} · InfoSystems`,
+      content: {
+        kicker: KIND_LABEL[kind],
+        title: `Сайтаас шинэ хүсэлт ирлээ: ${KIND_LABEL[kind]}`,
+        intro: "Доорх мэдээллийг шалгаад харилцагчтай холбогдоно уу. Энэ мэйлд хариулахад харилцагч руу очно.",
+        sectionTitle: "Илгээсэн мэдээлэл",
+        fields: [
+          { label: "Нэр", value: d.name },
+          { label: "Байгууллага", value: d.company },
+          { label: "Утас", value: d.phone },
+          { label: "И-мэйл", value: d.email },
+          { label: "Бүтээгдэхүүн", value: d.product },
+        ],
+        message: { label: "Мессеж", value: d.message },
+      },
+    });
+
+    const hours = await workingHours();
+    const when = hours ? `ажлын цагаар (${hours})` : "ажлын 1 өдөрт багтаан";
+    await sendMail({
+      to: d.email,
+      subject: `${TITLE[kind]} · InfoSystems`,
+      content: {
+        kicker: KIND_LABEL[kind],
+        title: TITLE[kind],
+        intro:
+          kind === "notify"
+            ? "Сайн байна уу. Бүтээгдэхүүний нээлтийн мэдээг авахаар бүртгүүлсэнд баярлалаа. Нээгдмэгц энэ хаягаар мэдэгдэнэ."
+            : `Сайн байна уу. InfoSystems Mongolia-д хандсанд баярлалаа. Манай мэргэжилтэн ${when} тантай холбогдоно.`,
+        note: "Хэрэв та энэ хүсэлтийг илгээгээгүй бол энэ захидлыг үл тоомсорлоно уу.",
+      },
+    });
   });
 }
 
 export async function submitContact(_prev: FormState, formData: FormData): Promise<FormState> {
   // Honeypot: bots fill every field.
   if (formData.get("website")) return { ok: true, message: "Хүсэлтийг хүлээн авлаа. Бид тантай удахгүй холбогдоно." };
-  if (await isRateLimited("contact", 5, 10 * 60_000))
-    return { ok: false, message: "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." };
 
+  // Validate first, so a mistyped phone number doesn't use up the rate limit.
   const parsed = ContactSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, message: "Талбаруудаа шалгана уу.", errors: fieldErrors(parsed.error) };
+  if (await isRateLimited("contact", 5, 10 * 60_000))
+    return { ok: false, message: "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." };
   const d = parsed.data;
 
-  await db.contactRequest.create({
-    data: {
-      kind: d.kind,
-      name: d.name,
-      company: d.company || null,
-      phone: d.phone,
-      email: d.email,
-      product: d.product || null,
-      message: d.message || null,
-    },
-  });
-  await notifyRequest(d.kind, d);
+  try {
+    await db.contactRequest.create({
+      data: {
+        kind: d.kind,
+        name: d.name,
+        company: d.company || null,
+        phone: d.phone,
+        email: d.email,
+        product: d.product || null,
+        message: d.message || null,
+      },
+    });
+  } catch (e) {
+    console.error("[contact] failed to save request", e);
+    return { ok: false, message: SAVE_FAILED };
+  }
+  notifyRequest(d.kind, d);
   return { ok: true, message: "Хүсэлтийг хүлээн авлаа. Бид ажлын 1 өдөрт багтаан тантай холбогдоно." };
 }
 
@@ -99,10 +122,15 @@ const NotifySchema = z.object({ email: z.email("И-мэйл хаяг буруу 
 /** "Notify me at launch" sign-up (MACS Micro). */
 export async function submitNotify(_prev: FormState, formData: FormData): Promise<FormState> {
   if (formData.get("website")) return { ok: true, message: "Бүртгэгдлээ." };
-  if (await isRateLimited("notify", 5, 10 * 60_000)) return { ok: false, message: "Түр хүлээгээд дахин оролдоно уу." };
   const parsed = NotifySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message, errors: fieldErrors(parsed.error) };
-  await db.contactRequest.create({ data: { kind: "notify", email: parsed.data.email, product: parsed.data.product } });
-  await notifyRequest("notify", parsed.data);
+  if (await isRateLimited("notify", 5, 10 * 60_000)) return { ok: false, message: "Түр хүлээгээд дахин оролдоно уу." };
+  try {
+    await db.contactRequest.create({ data: { kind: "notify", email: parsed.data.email, product: parsed.data.product } });
+  } catch (e) {
+    console.error("[contact] failed to save notify sign-up", e);
+    return { ok: false, message: SAVE_FAILED };
+  }
+  notifyRequest("notify", parsed.data);
   return { ok: true, message: "Бүртгэгдлээ. Нээлтийн мэдээг тань руу илгээнэ." };
 }

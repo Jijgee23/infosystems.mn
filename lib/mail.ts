@@ -6,8 +6,9 @@ import { renderHtml, renderText, type MailModel } from "@/lib/mail-template";
 /*
  * Same setup as macs.mn: one SMTP account (no_reply@infosystems.mn on smtp.mail.mn:465),
  * every message rendered from one template (lib/mail-template) as HTML + plain text.
- * Requests from the site go to NOTIFY_TO with the visitor in CC — that copy is their
- * «we received it» confirmation, so the text addresses them — and Reply-To the visitor.
+ * Requests from the site go to NOTIFY_TO with Reply-To the visitor. The visitor gets a separate
+ * fixed-text confirmation: their address is unverified, so nothing they typed is ever sent to it
+ * (otherwise the form relays arbitrary text from our domain to any inbox).
  *
  * Env: SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM, NOTIFY_TO.
  * The older names SMTP_PASSWORD / FROM_EMAIL / NOTIFY_EMAIL still work.
@@ -25,6 +26,11 @@ function transport() {
     port,
     secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : port === 465,
     auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS ?? process.env.SMTP_PASSWORD } : undefined,
+    // nodemailer waits up to 2 min to connect and 10 min on a stalled socket by default;
+    // fail fast instead, so a dead SMTP server can't hang requests.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
   return transporter;
 }

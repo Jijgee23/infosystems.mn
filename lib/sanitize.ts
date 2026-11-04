@@ -11,12 +11,18 @@ const ALLOWED: Record<string, string[]> = {
   table: [], thead: [], tbody: [], tr: [], th: ["colspan", "rowspan"], td: ["colspan", "rowspan"],
 };
 const DROP_WITH_CONTENT = new Set(["script", "style", "iframe", "object", "embed", "form", "input", "button", "textarea", "select", "noscript", "svg", "math"]);
-const SAFE_URL = /^(https?:|mailto:|tel:|\/(?!\/)|#)/i;
+// Browsers read `/\host` like `//host`, so a backslash after the leading slash is off-site too.
+const SAFE_URL = /^(https?:|mailto:|tel:|\/(?![/\\])|#)/i;
+
+/** Parser options shared with lib/rich-body: only script/style/noscript keep raw text, and those are dropped. */
+export const PARSE_OPTIONS = { comment: false, blockTextElements: { script: false, style: false, noscript: false } } as const;
 
 const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 function render(node: Node): string {
-  if (node.nodeType === NodeType.TEXT_NODE) return node.rawText; // already entity-encoded by the source
+  // Decode, then re-encode. Never pass rawText through: the parser leaves markup it can't match
+  // (e.g. `<img/src=x onerror=…>`) as text, and browsers would still read it as a tag.
+  if (node.nodeType === NodeType.TEXT_NODE) return escape(node.text);
   if (node.nodeType !== NodeType.ELEMENT_NODE) return "";
   const el = node as HTMLElement;
   const tag = el.rawTagName?.toLowerCase() ?? "";
@@ -41,13 +47,14 @@ function render(node: Node): string {
 /** Allowlist HTML sanitizer for rich text from the old CMS and from users. */
 export function sanitizeHtml(html: string | null | undefined) {
   if (!html) return "";
-  const root = parse(html, { comment: false, blockTextElements: { script: false, style: false, noscript: false, pre: true } });
+  const root = parse(html, PARSE_OPTIONS);
   return root.childNodes.map(render).join("");
 }
 
 /** Plain text (textarea input) to safe paragraph HTML. */
 export function textToHtml(text: string) {
   return text
+    .replace(/\r\n?/g, "\n") // browsers submit textarea line breaks as CRLF
     .trim()
     .split(/\n{2,}/)
     .map((p) => `<p>${escape(p).replace(/\n/g, "<br>")}</p>`)
