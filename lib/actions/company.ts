@@ -2,6 +2,7 @@
 
 import { idParam } from "@/lib/ids";
 import { refresh, revalidatePath, updateTag } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStaff } from "@/lib/auth/session";
 import { COMPANY_TAG } from "@/lib/data/company";
@@ -245,11 +246,13 @@ export async function saveEmployee(_prev: FormState, formData: FormData): Promis
   return { ok: true, message: "Хадгалагдлаа." };
 }
 
-export async function deleteEmployee(id: string) {
+/** `backToList`: called from the employee's own page, which no longer exists after the delete. */
+export async function deleteEmployee(id: string, backToList = false) {
   await requireStaff({ admin: true });
   const { photoId } = await db.employee.delete({ where: { id }, select: { photoId: true } });
   await releaseUploads([photoId]);
   changed();
+  if (backToList) redirect("/admin/employees");
 }
 
 // ---------------- Awards (шагнал урамшуулал) ----------------

@@ -64,7 +64,10 @@ export default async function EmployeesPage() {
                       )}
                       <div className="min-w-0">
                         <p className="truncate font-medium text-fg">
-                          {e.name} {!e.isPublic && <Badge>Нуусан</Badge>}
+                          <Link className="hover:text-brand hover:underline" href={`/admin/employees/${e.id}`}>
+                            {e.name}
+                          </Link>{" "}
+                          {!e.isPublic && <Badge>Нуусан</Badge>}
                         </p>
                         <p className="truncate text-xs text-fg-subtle">{[position?.label, department?.label, e.phone, e.email].filter(Boolean).join(" · ")}</p>
                       </div>

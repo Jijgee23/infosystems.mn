@@ -25,7 +25,18 @@ type Employee = {
   photoUrl: string | null;
 };
 
-export function EmployeeCard({ employee: e, departments, positions }: { employee: Employee | null; departments: Option[]; positions: PositionOption[] }) {
+export function EmployeeCard({
+  employee: e,
+  departments,
+  positions,
+  standalone = false,
+}: {
+  employee: Employee | null;
+  departments: Option[];
+  positions: PositionOption[];
+  /** Rendered on /admin/employees/[id]: deleting returns to the list. */
+  standalone?: boolean;
+}) {
   const [state, action, pending] = useActionState(saveEmployee, null);
   useCloseOnSave(state);
   // The department only narrows the position list; the saved value is the position.
@@ -129,7 +140,7 @@ export function EmployeeCard({ employee: e, departments, positions }: { employee
             </label>
             <span className="flex-1" />
             {e && (
-              <ConfirmButton action={deleteEmployee.bind(null, e.id)} confirm={`${e.name}-г устгах уу?`} size="sm" variant="ghost">
+              <ConfirmButton action={deleteEmployee.bind(null, e.id, standalone)} confirm={`${e.name}-г устгах уу?`} size="sm" variant="ghost">
                 Устгах
               </ConfirmButton>
             )}

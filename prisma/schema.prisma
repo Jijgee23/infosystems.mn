@@ -45,7 +45,7 @@ model User {
   customerType      CustomerType @default(company) @map("customer_type")
   /// Individual's civil register number, upper-case, e.g. УБ12345678.
   personalRegister  String?      @unique @map("personal_register") @db.VarChar(10)
-  role              UserRole     @default(customer)
+  role             UserRole     @default(customer)
   /// Approved by staff; customers cannot sign in before this.
   adminConfirmed    Boolean      @default(false) @map("admin_confirmed")
   blocked           Boolean      @default(false)
